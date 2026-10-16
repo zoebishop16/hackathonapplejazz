@@ -1,151 +1,124 @@
-![](docs/images/banner_thin.png)
+# Dock Watch: a bikeshare dock-availability and QC dashboard
 
-# 🎯 Cornell Six Sigma Hackathon
+**Live site:** https://zoebishop16.github.io/hackathonapplejazz/
+**Prompt:** Urban Systems: Bikeshare Fleets (Cornell Six Sigma Hackathon, on-campus track)
 
-*Tackle real-world quality control problems drawn from industrial engineering,
-healthcare systems, and energy systems!*
+At rush hour a city bikeshare runs out of bikes in residential districts and
+out of docks downtown, and maintenance vans are sent out blind. Dock Watch is
+for the **network planner or analyst** (with a dispatcher view for the van
+crew lead). It shows which stations are unusable, when and where, which dock
+counts are misleading, which stations will hit empty or full in the next hour,
+and which van should move bikes where. It also runs the quality-control
+analysis behind those calls: an FMEA, control charts and reliability models.
 
----
+All data is **synthetic**: 20 stations in 4 districts, polled every 5 minutes
+for 3 weeks ([codebook](data/README.md)).
 
-Your team picks a prompt, creates the data, and ships a working quality-control
-tool. **👉 [Register on Devpost](https://six-sigma-hackathon.devpost.com/)**
-(required, even if you don't have a team yet).
+## Run it (one command)
 
-### 📍 When & where
+```bash
+python3 app/testme.py
+```
 
-| | 🏫 On-campus (24 hours) | 🌐 Virtual DL Challenge (7 days) |
+Then open http://localhost:8000. Python 3.9+ and nothing else: the app is
+standard library only. It builds the JSON from `data/` and serves `app/site/`.
+
+Run the tests:
+
+```bash
+python3 -m pip install -r app/requirements.txt && python3 -m pytest tests -q && node tests/test_calc_js.mjs
+```
+
+Rebuild the datasets (optional; they are committed): `python3 scripts/generate_data.py`.
+
+## The seven pages
+
+| Page | What it shows | How to read it |
 |---|---|---|
-| **Who** | on-campus students (required unless excused) | distance-learning students, and anyone who can't attend in person |
-| **Runs** | Fri Oct 16, 3 PM → Sat Oct 17, 3 PM ET | Fri Oct 16, 3 PM → Fri Oct 23, 3 PM ET |
-| **Where** | Upson Hall 116 | online |
-| **Submissions due** | Sat Oct 17, **1 PM ET** sharp | Fri Oct 23, **3 PM ET** |
-| **Showcase** | Sat Oct 17, 2-3 PM (must attend) | — |
+| **Live Map** | every station on a schematic map, colored *and shaped* by fill level; filters by district, status, time of last update, open docks, problem stations only; click for fill %, bikes, effective capacity, broken docks | ▽ red empty, ◇ orange low, ● green medium, ■ blue high, ▲ purple full, ✕ dark gray out of service; a dashed ring marks a problem station, `!` a misleading fill |
+| **Stockouts & Heatmap** | hour × weekday heatmap (same filters), plus a log of every stockout (0 bikes) and fullout (0 docks) with station, start and duration | dark weekday 7-9 AM and 4-6 PM cells are the predictable rush pattern |
+| **Dock Health** | per-station table with a square for every dock (bike, broken bike, open, faulty ×, bike stuck !, never locks ∅) and a warning flag | "Fill: total docks" vs "Fill: effective" shows how broken docks mislead |
+| **Forecast & At-Risk** | stations likely to hit empty or full in the next 30-60 minutes, ranked by urgency then impact, with a check against what actually happened | "Now" first, then ≤ 30 min, then 30-60 min |
+| **Dispatch** | recommended pickup → drop-off moves, a task queue with Repair and Rebalancing tabs, and van status (location, load, queue) | assign a move to a van, confirm tasks complete (saved in your browser) |
+| **Maintenance** | fault tickets (opened, assigned, resolved, station history), repeat-offender report, mean time to repair, backlog | stations with 3+ unplanned repairs are repeat offenders |
+| **Data Analysis** | tabs: FMEA (editable S/O/D, Pareto by RPN), Control Charts (hourly X-bar, I-MR, p-chart), Reliability (series, parallel, availability, station as a system) | each chart has its formula and a "how to read this" line |
 
-Submit on **[Devpost](https://six-sigma-hackathon.devpost.com/)**: your repo
-link plus a demo. Full run of show: [🗓️ Schedule](docs/schedule.md).
+The top bar on every page has the dataset, the snapshot time ("now" in the
+replay: Wed 08:15, Wed 12:00, Wed 17:30 or Sat 13:00 of week 3) and a
+"last updated" freshness pill. **View as** switches between Analyst (all
+pages) and Dispatcher (no Data Analysis); it is a view filter, not a login.
 
----
+## Inputs
 
-### Quick Links
+| File | One row per | Key columns |
+|---|---|---|
+| `status.csv` | station per 5-minute poll | bikes available/disabled, docks available/disabled, status, last_reported |
+| `stations.csv` | station | district, total_docks, map x/y |
+| `dock_faults.csv` | broken-dock episode | dock_id, state, start, end |
+| `work_orders.csv` | van job | type, fault, opened/assigned/arrived/resolved, response_min |
+| `vans.csv` | van | capacity, depot |
 
-- [🗓️ Schedule of Events](docs/schedule.md)
-- [💬 Prompts](docs/prompts.md) — *revealed at the start of the event*
-- [🔢 Evaluation Criteria](docs/criteria.md)
-- [📚 Resources for Building Your Tool](docs/resources.md)
-- [🧰 Starter Templates](demos/README.md)
-- [🤖 Agent Start Tutorial](docs/start.md) — type `/superagent` and your agent reads it for you
-- [⁉️ FAQ](#️-frequently-asked-questions)
+Units and meanings for every column: [`data/README.md`](data/README.md). A
+real system would get the first two from its public GBFS feed.
 
----
+## The statistics (all in [`app/qc.py`](app/qc.py))
 
-> ### 📘🤖 New here? Read the [step-by-step start tutorial](docs/start.md) first
-> Ten minutes, for the whole team: set up your agent, **plan with `/superagent` on your
-> strongest model**, then **switch to a cheaper model** that builds and checks each task with
-> helper agents. **[→ docs/start.md](docs/start.md)**
+| Function | What it computes |
+|---|---|
+| `effective_capacity(total, disabled)` | total docks − broken docks |
+| `fill_pct(bikes, capacity)`, `fill_category(...)` | bikes ÷ effective capacity; empty 0%, low 1-29%, medium 30-69%, high 70-99%, full 100% |
+| `misleading_flag(...)` | full only because docks are broken; "bikes" that are all broken; or looks emptier when broken docks count as capacity |
+| `event_log(polls)` | every stockout / fullout: start, duration (5-minute steps), ongoing |
+| `xbar_chart(subgroups)` | X̿ = mean of subgroup means; σ_short = √(mean within-subgroup variance); limits X̿ ± 3σ_short/√n per subgroup |
+| `imr_chart(baseline, monitor)` | x̄ ± 3·MR̄/1.128; MR UCL = 3.267·MR̄; limits from the baseline only |
+| `p_chart(baseline, monitor)` | p̄ ± 3√(p̄(1−p̄)/n), LCL floored at 0 |
+| `rpn`, `occurrence_score`, `pareto` | RPN = S × O × D; observed rate → occurrence 1-10; Pareto order |
+| `series`, `parallel`, `availability`, `mtbf_mttr` | R₁R₂…; 1 − Π(1 − Rᵢ); MTBF/(MTBF + MTTR) |
+| `forecast_bikes(...)` | bikes now + (historical fill later − historical fill now) × capacity |
 
+How the charts are set up:
+- **Hourly X-bar** of % docks open: one subgroup per hour of the week; each
+  observation is one station's average for that hour in one week. Fill follows
+  a daily pattern, so rush hours fall outside the limits *by design*: that is
+  the predictable pattern, not a fault.
+- **I-MR** of `response_min`: limits from Tuesday's work orders, Thursday's
+  plotted against them.
+- **p-chart** of the share of stations unusable per poll (n = 20): limits from
+  Tuesday, Thursday plotted; a fixed 10:00-15:00 window avoids the rush signal.
 
-### 💡 The Challenge
+Every function has a known-answer and a degenerate test in
+[`tests/test_qc.py`](tests/test_qc.py) (numbers in [SPEC.md](SPEC.md) section 4).
+The in-browser FMEA and reliability calculators use [`app/site/calc.js`](app/site/calc.js),
+tested against the same answers in [`tests/test_calc_js.mjs`](tests/test_calc_js.mjs).
 
-Your team tackles one real-world quality control and reliability problem.
+Assumptions: observations within a subgroup are independent; the Tuesday
+baseline is in control; reliability blocks fail independently (the station
+page shows the observed joint rate to check this); open tickets are left out
+of MTTR (no censoring correction) and counted as backlog.
 
-- 🧩 Prompts are released **at kickoff** — each tied to a dataset you design and
-  build yourself
-- 📊 **The statistics are the graded core.** Statistical process control,
-  process capability, reliability modeling, failure analysis. The app is the
-  delivery vehicle for the analysis, not the point
-- 🧱 Ship a a dashboard / web app (React or Shiny), plus **one** of: an R package or Python library AND/OR a public REST API
-  (FastAPI or plumber).
-- 🚀 Deploy it live to the course **Posit Connect** server
-- 🔢 Every project is scored 0-100 by the event staff.
-  [Read the criteria](docs/criteria.md)
+## Demo
 
----
+[`demo/README.md`](demo/README.md) walks through every dataset with the
+numbers you should see.
 
-### 🤖 Build with AI — bring your own agent
+## Repo layout
 
-AI-assisted development is **expected and encouraged**. Use whatever you already
-have. The skill being tested is steering a capable assistant toward
-statistically correct work — which is exactly the skill this course is about.
+```
+app/qc.py            every statistic (standard library only)
+app/build.py         data/ -> app/site/data/*.json, calling qc.py
+app/testme.py        build + serve on localhost:8000
+app/site/            the static dashboard (index.html, app.js, calc.js, styles.css)
+data/                4 synthetic datasets + codebook
+scripts/generate_data.py   the dataset generator (seeded)
+tests/               pytest + node tests
+.github/workflows/pages.yml  test, build and publish to GitHub Pages on every push
+SPEC.md, CONTRACT.yaml, docs/plan.md   what we built and why
+```
 
-- [🧠 AI coding agents](docs/agents.md) — the popular ones, and how to pick
-- [🎙️ Tools](docs/tools.md) — Wispr Flow (talk to your agent) and Open Design
-- [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) — what the event is, the
-  repo map, the deploy target, the four-script contract
-- [`.claude/skills/superagent/`](.claude/skills/superagent/SKILL.md) — the one
-  skill you need: type `/superagent` and it routes to every other skill and
-  template for you. They all live in [`.claude/skills/`](.claude/skills/) if you
-  want to read them
+The hackathon's own pages (schedule, rubric, prompts) are in [`docs/`](docs/README.md).
 
-Two rules: everything you ship is **public and reproducible**, and you must be
-able to **explain every number your tool prints**.
+## Credits
 
----
-
-### ⁉️ Frequently Asked Questions
-
-- **Who can participate?** Cornell students who are (a) in the Systems
-  Engineering MEng/MS program, OR (b) enrolled in SYSEN 5300 / MAE 5390, OR
-  (c) enrolled in SYSEN 5900. Teams of **2 to 5**.
-
-- **On-campus or virtual?** On-campus students do the 24-hour event in Upson
-  Hall 116 (required unless excused). Distance-learning students, and anyone
-  who can't attend in person, do the 7-day Virtual DL Challenge.
-  [Dates above](#-when--where).
-
-- **What are the deadlines?** On-campus: submissions due Sat Oct 17, 1 PM ET
-  sharp; showcase Sat Oct 17, 2-3 PM (must attend). DL: submissions due
-  Fri Oct 23, 3 PM ET.
-
-- **What do we win?** On-campus winners: dinner for the team at the Statler
-  Dining Room. DL winners: bragging rights — infamy for all time.
-
-- **Do I need Six Sigma experience?** No. Trainings are provided during the
-  event, and many of the analyses can be learned in a few minutes. The
-  [course textbook](https://timothyfraser.com/sigma/) is open to everyone.
-
-- **Do I have to be a coding wizard?** No. Some prior experience in R or Python
-  is enough, and AI assistants close a lot of the gap. A winning project is a
-  smart, correct solution to a quality-control problem — not fancy code.
-
-- **What if I can't find team members?** Register on
-  [Devpost](https://six-sigma-hackathon.devpost.com/) anyway; we will match
-  you with a team.
-
-- **Do I have to be there the whole 24 hours?** A successful team works most of
-  it. Step out, sleep, stagger breaks — just keep someone on the team present.
-
-- **Can a teammate join the on-campus event remotely?** No. Anyone who can't
-  attend in person does the Virtual DL Challenge instead.
-
-- **What do we submit?** On Devpost: a link to your public GitHub repository
-  and a demo of a working prototype, deployed live to Posit Connect. At least
-  one team member needs a working (non-Cornell) GitHub account.
-
-- **What software do I need?** Install R or Python and at least one coding
-  interface (RStudio, VSCode, Cursor, Positron, ...) **before** the event
-  starts. If you plan to use an AI assistant, set it up beforehand too.
-
-- **What language should I use?** R, Python, or both. Code must be fully
-  reproducible and public.
-
-- **How are products evaluated?** Scored 0-100 by event staff on
-  [the criteria](docs/criteria.md): tool implementation (50), tool design
-  (25), documentation (25).
-
----
-
-### 👥 How to Join
-
-[Register on Devpost](https://six-sigma-hackathon.devpost.com/) — registration
-is required. Form a team of 2 to 5, or register solo and we'll match you.
-
----
-
-### 📚 Sign Up to Mentor
-
-Faculty, postdocs, PhD students, and developers are welcome as mentors.
-[Details here](docs/mentors.md).
-
----
-
-![](docs/images/banner_icons.png)
+Built with Claude Code from the team's design document. Course methods from
+the SYSEN 5300 textbook, https://timothyfraser.com/sigma/. GBFS field names
+follow https://gbfs.org/. No external libraries in the app.

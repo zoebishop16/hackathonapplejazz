@@ -12,3 +12,6 @@ rsconnect/
 .opencode/model-ladder-state.json
 
 .claude/settings.local.json
+
+# built by app/build.py from data/ (CI rebuilds it)
+app/site/data/

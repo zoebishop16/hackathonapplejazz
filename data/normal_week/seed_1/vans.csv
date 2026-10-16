@@ -1,0 +1,5 @@
+van_id,name,capacity,depot_x,depot_y
+V1,Van 1,20,50,60
+V2,Van 2,20,50,60
+V3,Van 3,16,30,30
+V4,Van 4,16,75,70

@@ -1,0 +1,21 @@
+station_id,name,district,profile,total_docks,x,y
+S01,City Hall,Downtown,downtown,11,48.0,56.1
+S02,Main & 5th,Downtown,downtown,13,60.7,50.2
+S03,Transit Center,Downtown,downtown,17,57.5,49.6
+S04,Library Square,Downtown,downtown,11,47.3,40.8
+S05,Market Hall,Downtown,downtown,17,55.9,42.8
+S06,Elm Park,Northside,residential,15,54.7,23.0
+S07,Hillcrest,Northside,residential,15,39.0,14.7
+S08,North Commons,Northside,residential,20,52.5,15.4
+S09,Maple Ave,Northside,residential,15,47.1,6.6
+S10,Ridge Rd,Northside,residential,11,46.4,19.4
+S11,Eastgate,Eastside,residential,16,95.2,47.7
+S12,Orchard St,Eastside,residential,17,86.3,57.5
+S13,Linden Way,Eastside,residential,10,96.2,52.4
+S14,Fall Creek,Eastside,residential,16,85.3,51.7
+S15,Belle Sherman,Eastside,residential,20,90.4,55.1
+S16,Pier 1,Waterfront,mixed,18,12.5,74.2
+S17,Boathouse,Waterfront,mixed,20,18.0,75.6
+S18,Marina,Waterfront,mixed,14,25.3,67.2
+S19,Inlet Trail,Waterfront,mixed,17,24.7,83.7
+S20,Ferry Landing,Waterfront,mixed,17,17.3,80.8

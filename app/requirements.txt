@@ -1,0 +1,2 @@
+# The app itself is standard library only; pytest runs the tests.
+pytest>=7
