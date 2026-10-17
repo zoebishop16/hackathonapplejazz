@@ -306,7 +306,7 @@ function stationIcon(r) {
     ? `<g stroke="${CAT_COLOR.out_of_service}" fill="none">${shapePath("out_of_service", 7)}</g>`
     : `<g fill="${CAT_COLOR[r.category]}" stroke="#fff" stroke-width="1.6">${shapePath(r.category, 8)}</g>`;
   const ring = isProblem(r) ? `<circle r="12.5" fill="none" stroke="#1d2125" stroke-width="1.2" stroke-dasharray="3 2.4"/>` : "";
-  const sel = S.selected === r.id ? `<circle r="15" fill="none" stroke="#1d2125" stroke-width="2"/>` : "";
+  const sel = S.selected === r.id ? `<circle r="15" fill="var(--highlight)" stroke="var(--highlight-strong)" stroke-width="2.5"/>` : "";
   const warn = r.misleading ? `<text x="9" y="-8" font-size="12" font-weight="800" fill="#8a5200" stroke="#fff" stroke-width="3" paint-order="stroke">!</text>` : "";
   return L.divIcon({ className: "stn-icon", iconSize: [36, 36], iconAnchor: [18, 18],
     html: `<svg width="36" height="36" viewBox="-18 -18 36 36" aria-hidden="true">${sel}${ring}${shape}${warn}</svg>` });

@@ -23,6 +23,14 @@
   /* shared light blue for the summary boxes on Dispatch and Maintenance */
   --box-blue: #e7f1fc;
   --box-blue-line: #c4dbf3;
+  /* highlight roles: the same light blue as the summary boxes (no new colours).
+     --highlight = hover and selected; --highlight-strong = stronger emphasis
+     (borders, underlines, rings). Red problem highlights always win. */
+  --highlight: var(--box-blue);
+  --highlight-strong: var(--box-blue-line);
+  /* red problem rows (unchanged values, now named) */
+  --risk-row: #fdeeec;
+  --risk-row-high: #f9d6d2;
   --radius: 8px;
   --shadow: 0 1px 2px rgba(16, 24, 32, .06);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -44,9 +52,9 @@ input[type=number] { width: 64px; }
 button {
   border: 1px solid var(--line-2); border-radius: 6px; background: #fff; padding: 4px 10px; height: 30px; cursor: pointer;
 }
-button:hover { background: var(--panel-2); }
+button:hover { background: var(--highlight); border-color: var(--highlight-strong); }
 button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-button.primary:hover { background: #1d2530; }
+button.primary:hover { background: var(--highlight-strong); border-color: var(--highlight-strong); color: var(--text); }
 :focus-visible { outline: 2px solid var(--high); outline-offset: 2px; }
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
@@ -67,8 +75,8 @@ nav a {
   display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px;
   color: var(--text); text-decoration: none; white-space: nowrap;
 }
-nav a:hover { background: var(--panel-2); }
-nav a[aria-current=page] { background: #e8ebef; font-weight: 600; }
+nav a:hover { background: var(--highlight); }
+nav a[aria-current=page] { background: var(--highlight); box-shadow: inset 0 0 0 1px var(--highlight-strong); font-weight: 600; }
 nav a svg { flex: none; }
 .shell.collapsed .sidebar { width: 56px; }
 .shell.collapsed nav a span { display: none; }
@@ -116,14 +124,15 @@ table { border-collapse: collapse; width: 100%; }
 th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 th { font-size: 12px; color: var(--muted); font-weight: 600; background: var(--panel-2); position: sticky; top: 0; z-index: 1; }
 th.sortable { cursor: pointer; user-select: none; }
-tbody tr:hover { background: #fafbfc; }
+tbody tr:hover { background: var(--highlight); }
 .table-wrap { overflow: auto; max-height: 560px; }
 
 .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); padding: 0 14px; }
 .tabs button {
   border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; height: 38px; padding: 0 12px; color: var(--muted);
 }
-.tabs button[aria-selected=true] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.tabs button[aria-selected=true] { color: var(--text); background: var(--highlight); border-bottom-color: var(--highlight-strong); font-weight: 600; }
+.tabs button:hover { background: var(--highlight); }
 
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 12px; color: var(--muted); }
 .legend .item { display: inline-flex; align-items: center; gap: 5px; }
@@ -201,13 +210,15 @@ tbody tr:hover { background: #fafbfc; }
 .warn-icon { color: #b26a00; font-size: 15px; cursor: help; }
 .indent { margin-left: 20px; }
 .badge.purple { border-color: var(--full); color: #5e2a87; }
-table.forecast tr.risk td { background: #fdeeec; }
-table.forecast tr.risk-high td { background: #f9d6d2; }
+table.forecast tr.risk td { background: var(--risk-row); }
+table.forecast tr.risk-high td { background: var(--risk-row-high); }
 table.forecast tr.risk-high td:first-child, table.forecast tr.risk td:first-child { box-shadow: inset 4px 0 0 var(--bad); }
+table.forecast tr.risk:hover td { background: var(--risk-row); }
+table.forecast tr.risk-high:hover td { background: var(--risk-row-high); }
 table.forecast td.hit { color: #a51d16; font-weight: 700; }
 .swatch { display: inline-block; width: 14px; height: 12px; border-radius: 3px; border: 1px solid #e3b5b0; }
-.swatch.risk { background: #fdeeec; }
-.swatch.risk-high { background: #f9d6d2; box-shadow: inset 3px 0 0 var(--bad); }
+.swatch.risk { background: var(--risk-row); }
+.swatch.risk-high { background: var(--risk-row-high); box-shadow: inset 3px 0 0 var(--bad); }
 .manual-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; gap: 10px 12px; align-items: end; }
 .manual-form label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
 .manual-form select, .manual-form input { width: 100%; }
@@ -234,14 +245,14 @@ tr.clickable:hover td { filter: brightness(.97); }
 tr.clickable:focus-visible { outline: 2px solid var(--high); outline-offset: -2px; }
 .ov-cards { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
 .page-card { position: relative; display: grid; gap: 6px; align-content: space-between; padding: 12px 14px; min-height: 104px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--text); text-decoration: none; transition: border-color .12s, box-shadow .12s, transform .12s; }
-.page-card:hover, .page-card:focus-visible { border-color: var(--high); box-shadow: 0 3px 10px rgba(44, 111, 191, .14); transform: translateY(-1px); }
+.page-card:hover, .page-card:focus-visible { background: var(--highlight); border-color: var(--highlight-strong); box-shadow: var(--shadow); transform: translateY(-1px); }
 .page-card:focus-visible { outline: 2px solid var(--high); outline-offset: 2px; }
 .pc-title { font-weight: 600; font-size: 13px; }
 .pc-line { font-size: 12px; color: var(--muted); }
 .pc-num { font-size: 18px; font-weight: 650; color: var(--accent); font-variant-numeric: tabular-nums; padding-right: 18px; }
 .pc-num small { font-size: 11px; font-weight: 500; color: var(--muted); }
 .pc-arrow { position: absolute; right: 12px; bottom: 10px; color: var(--muted); font-size: 16px; }
-.page-card:hover .pc-arrow { color: var(--high); }
+.page-card:hover .pc-arrow { color: var(--text); }
 
 /* ---------------------------------------------------------------- charts */
 .chart { width: 100%; height: auto; display: block; }

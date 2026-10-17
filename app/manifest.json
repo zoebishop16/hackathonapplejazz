@@ -35,7 +35,7 @@
       "checksum": "50f83c7630c7cf9c4478cacae70870af"
     },
     "site/app.js": {
-      "checksum": "a24b0fa9ba4b817afeaf4fc165ea2c07"
+      "checksum": "3366ffffd161b8e65e8acfd42f794324"
     },
     "site/calc.js": {
       "checksum": "0dbc225e31222b85d42b7b679782205b"
@@ -56,13 +56,13 @@
       "checksum": "126ae1d3d741440de4809b0e1d5988e4"
     },
     "site/index.html": {
-      "checksum": "db6167e93d2f1fdb66c605592682ab05"
+      "checksum": "60ed135446f80b90941178b3b8dca1e0"
     },
     "site/package.json": {
       "checksum": "07613765e9341a0662911bdef9f5bb2b"
     },
     "site/styles.css": {
-      "checksum": "ee612707ed8dfc08c9fd58ea8e519959"
+      "checksum": "9da039bee6c1178e63ba8bc72f5b8281"
     }
   }
 }
