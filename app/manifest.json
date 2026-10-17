@@ -56,13 +56,13 @@
       "checksum": "126ae1d3d741440de4809b0e1d5988e4"
     },
     "site/index.html": {
-      "checksum": "60ed135446f80b90941178b3b8dca1e0"
+      "checksum": "576393ac1bfd1ebc6431e1cac3dd65e9"
     },
     "site/package.json": {
       "checksum": "07613765e9341a0662911bdef9f5bb2b"
     },
     "site/styles.css": {
-      "checksum": "9da039bee6c1178e63ba8bc72f5b8281"
+      "checksum": "9c8bd300c1df05d2b044774c8495933c"
     }
   }
 }
