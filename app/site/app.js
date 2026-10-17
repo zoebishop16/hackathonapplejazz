@@ -229,6 +229,21 @@ function openOnMap(id) {
 }
 
 // ----------------------------------------------------------------- Overview
+// Plain-language wording for the Overview (labels only; the data is unchanged)
+function plainIssue(t) {
+  return ({ "Empty now": "Empty station now", "Full now": "Station full now",
+    "Will be empty": "Empty station soon", "Will be full": "Station full soon" })[t] || t;
+}
+// FMEA mode names in plain words, for the Overview card only (the FMEA table keeps its names)
+const PLAIN_MODE = { "Station empty": "Empty stations", "Station full": "Stations full", "Docks disabled": "Broken docks",
+  "Silent feed": "Stations not reporting", "Kiosk offline": "Kiosks offline", "Slow van response": "Slow van response" };
+function plainWhen(i) {
+  if (!i.urgency) return "—";
+  if (i.urgency === 5 || i.minutes_to_hit === 0) return "Now";
+  const m = i.minutes_to_hit;
+  return m < 60 ? `Within ${m} min` : `Within ${m / 60} hour${m === 60 ? "" : "s"}`;
+}
+
 function pageOverview(el) {
   const snap = snapData();
   const sm = snap.summary;
@@ -240,29 +255,29 @@ function pageOverview(el) {
   const card = (href, title, line, value) => `<a class="page-card" href="${href}"><div><div class="pc-title">${title}</div><div class="pc-line">${line}</div></div><div class="pc-num">${value}</div><span class="pc-arrow" aria-hidden="true">→</span></a>`;
   el.innerHTML = `<div class="stack overview">
     <div class="grid cols-4 ov-strip">
-      ${stat(sm.empty, "empty stations now<br><span>no rentable bikes</span>", CAT_COLOR.empty)}
-      ${stat(sm.full, "full stations now<br><span>no open docks</span>", CAT_COLOR.full)}
-      ${stat(sm.out_of_service, "out-of-service stations now", CAT_COLOR.out_of_service)}
-      ${stat(sm.docks_available_pct === null ? "—" : `${fmt(sm.docks_available_pct, 0)}%`, `of docks available<br><span>${sm.docks_available} of ${sm.docks_total}, network-wide</span>`, CAT_COLOR.medium)}
+      ${stat(sm.empty, "empty stations now<br><span>0 bikes to rent</span>", CAT_COLOR.empty)}
+      ${stat(sm.full, "stations full now<br><span>0 open docks</span>", CAT_COLOR.full)}
+      ${stat(sm.out_of_service, "stations out of service now", CAT_COLOR.out_of_service)}
+      ${stat(sm.docks_available_pct === null ? "—" : `${fmt(sm.docks_available_pct, 0)}%`, `of total docks available<br><span>${sm.docks_available} of ${sm.docks_total} docks</span>`, CAT_COLOR.medium)}
     </div>
     <div class="card ov-risk">
-      <div class="card-h"><h2>Stations at risk<span class="subhead">Top 5, in the same order as Dispatch · click a row to see it on the map</span></h2><a href="#dispatch" class="small">View all ${atRisk.length} →</a></div>
+      <div class="card-h"><h2>Stations at risk<span class="subhead">Most urgent first. Select a station to see it on the map.</span></h2><a href="#dispatch" class="small">See all ${atRisk.length} on Dispatch →</a></div>
       ${top.length ? `<div class="table-wrap" style="max-height:none"><table class="forecast"><thead><tr><th>Station</th><th>Issue</th><th class="num">Risk %</th><th>Time until event</th></tr></thead><tbody>
-        ${top.map((i) => `<tr class="${i.priority === "high" ? "risk-high" : "risk"} clickable" tabindex="0" role="link" data-open="${i.id}" aria-label="Open ${esc(stName(i.id))} on the map">
+        ${top.map((i) => `<tr class="${i.priority === "high" ? "risk-high" : "risk"} clickable" tabindex="0" role="link" data-open="${i.id}" aria-label="See ${esc(stName(i.id))} on the map">
           <td><b>${esc(stName(i.id))}</b><div class="small muted">${esc(stationInfo(i.id).district)}</div></td>
-          <td><span class="row" style="gap:6px;flex-wrap:nowrap">${issueIcon(i)}${esc(i.issues.join(" · "))}</span></td>
+          <td><span class="row" style="gap:6px;flex-wrap:nowrap">${issueIcon(i)}${esc(i.issues.map(plainIssue).join(" · "))}</span></td>
           <td class="num"><b>${i.risk_pct === null ? "—" : `${fmt(i.risk_pct, 0)}%`}</b></td>
-          <td>${timeUntil(i)}</td></tr>`).join("")}
+          <td>${plainWhen(i)}</td></tr>`).join("")}
       </tbody></table></div>
-      <p class="howto" style="margin:8px 14px 12px">Risk % = how often the station was empty, full or out of service in the next 2 hours at this weekday and time in earlier weeks (100% when it already is). Red rows are high priority.</p>`
-      : `<div class="state">No stations at risk right now.</div>`}
+      <p class="howto" style="margin:8px 14px 12px">Red rows are high priority. Risk % is how often this station had a problem at this day and time in past weeks (100% if it has one now).</p>`
+      : `<div class="state"><p><b>No stations at risk right now.</b></p><p class="small">Every station has bikes and open docks. Check again after the next update, or open the <a href="#map">Map</a> to see all stations.</p></div>`}
     </div>
     <div class="grid ov-cards">
       ${card("#map", "Map", "stations empty or full now", sm.empty + sm.full)}
-      ${card("#dispatch", "Dispatch", "open rebalancing tasks", openRebalanceTasks())}
+      ${card("#dispatch", "Dispatch", "bike moves still open", openRebalanceTasks())}
       ${card("#maintenance", "Dock Health", "stations with broken docks", sm.broken_dock_stations)}
-      ${card("#maintenance", "Maintenance", "mean time to repair", snap.maintenance.mttr_min === null ? "—" : dur(snap.maintenance.mttr_min))}
-      ${card("#analysis", "Data Analysis", "top failure mode (FMEA)", tf ? `${esc(tf.mode)} <small>RPN ${tf.rpn}</small>` : "—")}
+      ${card("#maintenance", "Maintenance", "average time to fix a fault", snap.maintenance.mttr_min === null ? "—" : dur(snap.maintenance.mttr_min))}
+      ${card("#analysis", "Data Analysis", "biggest risk to fix first", tf ? `${esc(PLAIN_MODE[tf.mode] || tf.mode)} <small>score ${tf.rpn}</small>` : "—")}
     </div>
   </div>`;
   el.querySelectorAll("[data-open]").forEach((tr) => {
