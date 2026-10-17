@@ -90,7 +90,7 @@ function catBadge(cat) {
 }
 function fillLegend(extra = "") {
   return `<div class="legend" aria-label="Legend">${CATS.map((c) => `<span class="item">${markerSvg(c, 6)}${CAT_LABEL[c]}</span>`).join("")}
-    <span class="item"><svg width="18" height="18" viewBox="-9 -9 18 18" aria-hidden="true"><circle r="7" fill="none" stroke="var(--gray-900)" stroke-dasharray="2 2"/></svg>Problem station</span>${extra}</div>`;
+    <span class="item"><svg width="18" height="18" viewBox="-9 -9 18 18" aria-hidden="true"><circle r="7" fill="none" stroke="#1d2125" stroke-dasharray="2 2"/></svg>Problem station</span>${extra}</div>`;
 }
 
 // ------------------------------------------------------------------- tooltip
@@ -126,7 +126,7 @@ function renderTop() {
   const rows = snapData().stations;
   const fresh = rows.filter((r) => r.feed_age_min <= 5).length;
   const stale = rows.filter((r) => r.feed_age_min > S.data.meta.stale_min).length;
-  const color = stale ? "var(--bad)" : fresh < rows.length ? "var(--faint)" : "var(--accent-500)";
+  const color = stale ? "var(--bad)" : fresh < rows.length ? "var(--warn)" : "var(--ok)";
   $("#fresh").innerHTML = `<span class="dot" style="background:${color}"></span>Last updated ${esc(shortTime(snapData().time))} · ${fresh}/${rows.length} feeds fresh${stale ? ` · <b>${stale} stale</b>` : ""}`;
   $("#fresh").title = "Snapshot time of this replay, and how many station feeds reported in the last 5 minutes";
 }
@@ -234,7 +234,7 @@ function pageOverview(el) {
   const sm = snap.summary;
   const atRisk = snap.forecast.filter((i) => i.urgency > 0);
   const top = atRisk.slice(0, 5);
-  const stat = (value, label, color) => `<div class="card kpi kpi-accent ov-stat"><div class="v" style="color:${color}">${value}</div><div class="l">${label}</div></div>`;
+  const stat = (value, label, color) => `<div class="card kpi kpi-blue ov-stat"><div class="v" style="color:${color}">${value}</div><div class="l">${label}</div></div>`;
   const issueIcon = (i) => markerSvg(i.status !== "active" ? "out_of_service" : i.risk === "full" ? "full" : i.risk === "empty" ? "empty" : "low", 5);
   const tf = topFailureMode();
   const card = (href, title, line, value) => `<a class="page-card" href="${href}"><div><div class="pc-title">${title}</div><div class="pc-line">${line}</div></div><div class="pc-num">${value}</div><span class="pc-arrow" aria-hidden="true">→</span></a>`;
@@ -243,7 +243,7 @@ function pageOverview(el) {
       ${stat(sm.empty, "empty stations now<br><span>no rentable bikes</span>", CAT_COLOR.empty)}
       ${stat(sm.full, "full stations now<br><span>no open docks</span>", CAT_COLOR.full)}
       ${stat(sm.out_of_service, "out-of-service stations now", CAT_COLOR.out_of_service)}
-      ${stat(sm.docks_available_pct === null ? "—" : `${fmt(sm.docks_available_pct, 0)}%`, `of docks available<br><span>${sm.docks_available} of ${sm.docks_total}, network-wide</span>`, "var(--accent-700)")}
+      ${stat(sm.docks_available_pct === null ? "—" : `${fmt(sm.docks_available_pct, 0)}%`, `of docks available<br><span>${sm.docks_available} of ${sm.docks_total}, network-wide</span>`, CAT_COLOR.medium)}
     </div>
     <div class="card ov-risk">
       <div class="card-h"><h2>Stations at risk<span class="subhead">Top 5, in the same order as Dispatch · click a row to see it on the map</span></h2><a href="#dispatch" class="small">View all ${atRisk.length} →</a></div>
@@ -284,7 +284,7 @@ function pageMapAll(el) {
     ${filtersHtml()}
     <div class="stack">
       <div class="card map-card">
-        <div class="card-h"><div>${fillLegend(`<span class="item"><b style="color:var(--flag)">!</b> Misleading fill</span><span class="item"><span class="van-badge" aria-hidden="true">V</span>Van</span>`)}</div></div>
+        <div class="card-h"><div>${fillLegend(`<span class="item"><b style="color:#8a5200">!</b> Misleading fill</span><span class="item"><span class="van-badge" aria-hidden="true">V</span>Van</span>`)}</div></div>
         <div class="map-wrap">
           <div class="leaflet-box" id="leaflet" role="region" aria-label="Map of Boston bikeshare stations"><div class="state"><div class="spinner"></div>Loading map...</div></div>
           <div class="side" id="side">${sidePanel()}</div>
@@ -304,10 +304,10 @@ function stationIcon(r) {
   const oos = r.category === "out_of_service";
   const shape = oos
     ? `<g stroke="${CAT_COLOR.out_of_service}" fill="none">${shapePath("out_of_service", 7)}</g>`
-    : `<g fill="${CAT_COLOR[r.category]}" stroke="var(--gray-0)" stroke-width="1.6">${shapePath(r.category, 8)}</g>`;
-  const ring = isProblem(r) ? `<circle r="12.5" fill="none" stroke="var(--gray-900)" stroke-width="1.2" stroke-dasharray="3 2.4"/>` : "";
-  const sel = S.selected === r.id ? `<circle r="15" fill="none" stroke="var(--gray-900)" stroke-width="2"/>` : "";
-  const warn = r.misleading ? `<text x="9" y="-8" font-size="12" font-weight="800" fill="var(--flag)" stroke="var(--gray-0)" stroke-width="3" paint-order="stroke">!</text>` : "";
+    : `<g fill="${CAT_COLOR[r.category]}" stroke="#fff" stroke-width="1.6">${shapePath(r.category, 8)}</g>`;
+  const ring = isProblem(r) ? `<circle r="12.5" fill="none" stroke="#1d2125" stroke-width="1.2" stroke-dasharray="3 2.4"/>` : "";
+  const sel = S.selected === r.id ? `<circle r="15" fill="none" stroke="#1d2125" stroke-width="2"/>` : "";
+  const warn = r.misleading ? `<text x="9" y="-8" font-size="12" font-weight="800" fill="#8a5200" stroke="#fff" stroke-width="3" paint-order="stroke">!</text>` : "";
   return L.divIcon({ className: "stn-icon", iconSize: [36, 36], iconAnchor: [18, 18],
     html: `<svg width="36" height="36" viewBox="-18 -18 36 36" aria-hidden="true">${sel}${ring}${shape}${warn}</svg>` });
 }
@@ -396,11 +396,6 @@ const HEAT = {
   unusable: { label: "% of polls unusable (empty, full or out of service)", num: "unusable", den: "n" },
   fill: { label: "Average fill %", num: "fill_sum", den: "active_n" },
 };
-// heatmap colour bands (share of the max) -> accent tone; dark text on the light tones
-const HEAT_BANDS = [
-  { to: 0.15, tone: 50, dark: true }, { to: 0.3, tone: 100, dark: true }, { to: 0.45, tone: 200, dark: true },
-  { to: 0.6, tone: 300, dark: true }, { to: 0.8, tone: 500, dark: false }, { to: 1, tone: 700, dark: false },
-];
 function heatmapCard(ids) {
   const m = HEAT[S.heatMetric];
   const cells = Array.from({ length: 168 }, (_, k) => {
@@ -410,24 +405,22 @@ function heatmapCard(ids) {
   });
   const max = S.heatMetric === "fill" ? 100 : Math.max(5, ...cells.filter((v) => v !== null));
   const cw = 34, ch = 26, left = 40, top = 26;
-  // stepped accent scale: one token per band, so labels always meet contrast
-  const band = (v) => HEAT_BANDS.findIndex((b) => v / max <= b.to);
-  const shade = (v) => (v === null ? "var(--gray-100)" : `var(--accent-${HEAT_BANDS[band(v)].tone})`);
-  const ink = (v) => (HEAT_BANDS[band(v)].dark ? "var(--accent-900)" : "var(--on-accent)");
+  const rgb = S.heatMetric === "fill" ? "44,111,191" : "209,52,44";
+  const shade = (v) => (v === null ? "#f3f4f6" : `rgba(${rgb},${0.06 + 0.94 * (v / max)})`);
   let svg = "";
   for (let d = 0; d < 7; d++) {
     svg += `<text x="${left - 8}" y="${top + d * ch + ch / 2 + 4}" text-anchor="end">${DOW[d]}</text>`;
     for (let h = 0; h < 24; h++) {
       const v = cells[d * 24 + h];
-      svg += `<rect x="${left + h * cw}" y="${top + d * ch}" width="${cw}" height="${ch}" fill="${shade(v)}" stroke="var(--gray-0)" stroke-width="1"
+      svg += `<rect x="${left + h * cw}" y="${top + d * ch}" width="${cw}" height="${ch}" fill="${shade(v)}" stroke="#fff" stroke-width="1"
         data-tip="${DOW[d]} ${String(h).padStart(2, "0")}:00-${String(h).padStart(2, "0")}:59\n${m.label}: ${v === null ? "no data" : v.toFixed(1) + "%"}\n${ids.length} stations"><title>${DOW[d]} ${h}:00 ${v === null ? "no data" : v.toFixed(1) + "%"}</title></rect>`;
-      if (v !== null && v >= max * 0.45) svg += `<text x="${left + h * cw + cw / 2}" y="${top + d * ch + ch / 2 + 4}" text-anchor="middle" style="fill:${ink(v)};font-size:9px;pointer-events:none">${Math.round(v)}</text>`;
+      if (v !== null && v >= max * 0.45) svg += `<text x="${left + h * cw + cw / 2}" y="${top + d * ch + ch / 2 + 4}" text-anchor="middle" style="fill:#fff;font-size:9px;pointer-events:none">${Math.round(v)}</text>`;
     }
   }
   // hour labels sit on the grid lines (the start of each hour), not on the blocks
   for (let h = 0; h <= 24; h++) {
     const x = left + h * cw;
-    svg += `<line x1="${x}" x2="${x}" y1="${top - 6}" y2="${top + 7 * ch}" stroke="var(--gray-300)" stroke-width="${h % 6 === 0 ? 1.2 : .6}"/>
+    svg += `<line x1="${x}" x2="${x}" y1="${top - 6}" y2="${top + 7 * ch}" stroke="#b8bfc7" stroke-width="${h % 6 === 0 ? 1.2 : .6}"/>
       <text x="${x}" y="${top - 10}" text-anchor="middle">${h}</text>`;
   }
   return `<div class="card">
@@ -435,7 +428,7 @@ function heatmapCard(ids) {
       <label class="row small">Metric <select id="heat-metric">${Object.entries(HEAT).map(([k, v]) => `<option value="${k}" ${k === S.heatMetric ? "selected" : ""}>${v.label}</option>`).join("")}</select></label></div>
     <div class="card-b">
       <svg class="heat" viewBox="0 0 ${left + 24 * cw + 12} ${top + 7 * ch + 4}" role="img" aria-label="Heatmap of ${m.label} by hour and weekday">${svg}</svg>
-      <div class="legend" style="margin-top:8px"><span class="heat-scale" aria-label="Colour scale">${HEAT_BANDS.map((b, k) => `<span class="heat-step" style="background:var(--accent-${b.tone})" title="${fmt(k ? HEAT_BANDS[k - 1].to * max : 0)}-${fmt(b.to * max)}%"></span>`).join("")}</span><span>0-${fmt(max)}%</span>
+      <div class="legend" style="margin-top:8px"><span>0%</span><span style="display:inline-block;width:160px;height:10px;border-radius:5px;background:linear-gradient(90deg,rgba(${rgb},.06),rgba(${rgb},1))"></span><span>${fmt(max)}%</span>
         <span class="item">Hour labels mark where each hour starts · numbers show the darker cells</span></div>
       <p class="howto">Each cell pools every 5-minute poll in that hour over the 3 weeks of data for the ${ids.length} filtered stations. Try one district at a time: South Boston, Jamaica Plain and Charlestown empty in the morning, Downtown and Back Bay fill.</p>
     </div>
@@ -461,14 +454,14 @@ function pageMaintenanceAll(el) {
   const n = rows.length;
   const p = (a, b) => (b ? (100 * a) / b : null);
   const maxRep = Math.max(1, ...rows.map((x) => x.reps));
-  const dockLegend = `<div class="legend">${Object.entries(DOCK_STATES).map(([k, [lab, sym]]) => `<span class="item"><span class="dock ${k}" aria-hidden="true">${sym}</span>${lab}</span>`).join("")}<span class="item"><b style="color:var(--flag)">⚠</b> Misleading fill</span></div>`;
+  const dockLegend = `<div class="legend">${Object.entries(DOCK_STATES).map(([k, [lab, sym]]) => `<span class="item"><span class="dock ${k}" aria-hidden="true">${sym}</span>${lab}</span>`).join("")}<span class="item"><b style="color:#8a5200">⚠</b> Misleading fill</span></div>`;
   el.innerHTML = `<div class="stack">
     <div class="grid cols-5">
-      ${pctKpi("kpi-accent", p(brokenDocks, total), `${brokenDocks} of ${total} docks`, "broken docks")}
-      ${pctKpi("kpi-accent", p(brokenBikes, bikes), `${brokenBikes} of ${bikes} docked bikes`, "broken bikes in docks")}
-      ${pctKpi("kpi-accent", p(total - brokenDocks, total), `${total - brokenDocks} of ${total} docks`, "effective capacity (usable docks)")}
-      ${pctKpi("kpi-accent", p(flagged, n), `${flagged} of ${n} stations`, "stations with misleading fill")}
-      ${pctKpi("kpi-accent", p(repeat, n), `${repeat} of ${n} stations`, `repeat offenders (${fmt(thr, 0)}+ unplanned repairs)`)}
+      ${pctKpi("kpi-blue", p(brokenDocks, total), `${brokenDocks} of ${total} docks`, "broken docks")}
+      ${pctKpi("kpi-blue", p(brokenBikes, bikes), `${brokenBikes} of ${bikes} docked bikes`, "broken bikes in docks")}
+      ${pctKpi("kpi-blue", p(total - brokenDocks, total), `${total - brokenDocks} of ${total} docks`, "effective capacity (usable docks)")}
+      ${pctKpi("kpi-blue", p(flagged, n), `${flagged} of ${n} stations`, "stations with misleading fill")}
+      ${pctKpi("kpi-blue", p(repeat, n), `${repeat} of ${n} stations`, `repeat offenders (${fmt(thr, 0)}+ unplanned repairs)`)}
     </div>
     <div class="card">
       <div class="card-h"><h2>Dock health at ${esc(shortTime(snap.time))}</h2>${dockLegend}</div>
@@ -479,8 +472,8 @@ function pageMaintenanceAll(el) {
             <td class="num">${s.total_docks}</td><td class="num">${r.docks_disabled}</td><td class="num">${r.eff}</td>
             <td class="num">${r.bikes_available + r.bikes_disabled} (${r.bikes_disabled})</td>
             <td><div class="docks">${d.grid.map((g, i) => `<span class="dock ${g}" data-tip="Dock ${i + 1}: ${DOCK_STATES[g][0]}" aria-label="Dock ${i + 1}: ${DOCK_STATES[g][0]}">${DOCK_STATES[g][1]}</span>`).join("")}</div>
-              ${d.mismatch ? `<div class="small muted">Feed reports ${d.feed_broken} broken, dock log shows ${d.fault_log_broken}${r.feed_age_min > S.data.meta.stale_min ? " (feed is stale)" : ""}</div>` : ""}</td>
-            <td class="repeat"><div class="row" style="gap:8px;flex-wrap:nowrap"><b class="num" style="min-width:18px">${reps}</b><div class="loadbar" style="flex:1;min-width:60px"><div style="width:${(100 * reps) / maxRep}%;background:${reps >= thr ? "var(--accent-500)" : "var(--line-2)"}"></div></div>${reps >= thr ? `<span class="badge accent">repeat</span>` : ""}</div></td></tr>`).join("")}</tbody></table></div>
+              ${d.mismatch ? `<div class="small" style="color:#8a5200">Feed reports ${d.feed_broken} broken, dock log shows ${d.fault_log_broken}${r.feed_age_min > S.data.meta.stale_min ? " (feed is stale)" : ""}</div>` : ""}</td>
+            <td class="repeat"><div class="row" style="gap:8px;flex-wrap:nowrap"><b class="num" style="min-width:18px">${reps}</b><div class="loadbar" style="flex:1;min-width:60px"><div style="width:${(100 * reps) / maxRep}%;background:${reps >= thr ? "var(--full)" : "var(--line-2)"}"></div></div>${reps >= thr ? `<span class="badge purple">repeat</span>` : ""}</div></td></tr>`).join("")}</tbody></table></div>
       <p class="howto" style="margin:0 14px 12px">Effective capacity = total docks − broken docks. ⚠ = broken docks or bikes make the station look fuller or emptier than it is (hover for which). Repeat offenders have at least ${fmt(thr, 0)} unplanned repair tickets (dock faults, offline or broken kiosks, silent feeds) since the data began: 3 or more, and at least twice the network median of ${fmt(thr / 2, 1)}. Dock order is schematic: broken docks come from the dock fault log, bikes fill the working docks.</p>
     </div></div>`;
 }
@@ -567,7 +560,7 @@ function pageDispatchAll(el) {
       <label>Bikes<input type="number" id="mf-bikes" min="1" max="${Math.max(1, maxBikes)}" value="${D.bikes}"></label>
       <label>Van${vanSelect('id="mf-van"', formChoices)}</label>
       <button class="primary" id="mf-create" ${problems.length ? "disabled" : ""}>Create task</button>
-      ${problems.length ? `<p class="small" style="color:var(--danger-text);grid-column:1/-1;margin:0">Can't create yet: ${esc(problems.join("; "))}.</p>` : `<p class="small muted" style="grid-column:1/-1;margin:0">Up to ${maxBikes} bikes fit (rentable bikes at the pick-up and open docks at the drop-off).</p>`}
+      ${problems.length ? `<p class="small" style="color:#a51d16;grid-column:1/-1;margin:0">Can't create yet: ${esc(problems.join("; "))}.</p>` : `<p class="small muted" style="grid-column:1/-1;margin:0">Up to ${maxBikes} bikes fit (rentable bikes at the pick-up and open docks at the drop-off).</p>`}
     </div></div>`;
 
   const repairTasks = snap.tasks.repair.map((id) => orders[id]);
@@ -617,10 +610,10 @@ function pageDispatchAll(el) {
       </div>
     </div>
     <div class="grid cols-4">
-      <div class="card kpi kpi-accent"><div class="v">${snap.moves.length}</div><div class="l">recommended moves</div></div>
-      <div class="card kpi kpi-accent"><div class="v">${repairTasks.length + openRebalanceTasks()}</div><div class="l">open tasks (${repairTasks.length} repair · ${openRebalanceTasks()} rebalancing)</div></div>
-      <div class="card kpi kpi-accent"><div class="v">${nFree} / ${vans.length}</div><div class="l">vans available now</div></div>
-      <div class="card kpi kpi-accent"><div class="v">${res.rebalance.median_min === null ? "—" : dur(res.rebalance.median_min)}</div><div class="l">median time to resolve a rebalance call (${res.rebalance.n} done)</div></div>
+      <div class="card kpi kpi-blue"><div class="v">${snap.moves.length}</div><div class="l">recommended moves</div></div>
+      <div class="card kpi kpi-blue"><div class="v">${repairTasks.length + openRebalanceTasks()}</div><div class="l">open tasks (${repairTasks.length} repair · ${openRebalanceTasks()} rebalancing)</div></div>
+      <div class="card kpi kpi-blue"><div class="v">${nFree} / ${vans.length}</div><div class="l">vans available now</div></div>
+      <div class="card kpi kpi-blue"><div class="v">${res.rebalance.median_min === null ? "—" : dur(res.rebalance.median_min)}</div><div class="l">median time to resolve a rebalance call (${res.rebalance.n} done)</div></div>
     </div>
     ${form}
     <div class="grid dispatch">
@@ -666,27 +659,27 @@ function lineChart({ points, w = 960, h = 260, yLabel = "", xLabels = [], lines 
     g += `<line class="grid" x1="${pad.l}" x2="${w - pad.r}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${pad.l - 6}" y="${Y(v) + 4}" text-anchor="end">${v.toFixed(Math.abs(y1 - y0) < 2 ? 2 : 0)}</text>`;
   }
   xLabels.forEach(([i, lab]) => { g += `<line class="grid" x1="${X(i)}" x2="${X(i)}" y1="${pad.t}" y2="${h - pad.b}"/><text x="${X(i) + 3}" y="${h - pad.b + 14}">${lab}</text>`; });
-  if (phaseSplit !== null) g += `<line x1="${X(phaseSplit - .5)}" x2="${X(phaseSplit - .5)}" y1="${pad.t}" y2="${h - pad.b}" stroke="var(--gray-700)" stroke-dasharray="4 3"/>
+  if (phaseSplit !== null) g += `<line x1="${X(phaseSplit - .5)}" x2="${X(phaseSplit - .5)}" y1="${pad.t}" y2="${h - pad.b}" stroke="#1d2125" stroke-dasharray="4 3"/>
     <text x="${X(phaseSplit - .5) - 6}" y="${pad.t + 10}" text-anchor="end" style="font-weight:600">Tuesday: sets limits</text><text x="${X(phaseSplit - .5) + 6}" y="${pad.t + 10}" style="font-weight:600">Thursday: monitored</text>`;
   if (stepLimits) {
     const path = (key) => stepLimits.map((s, i) => (s[key] === null ? "" : `${i === 0 || stepLimits[i - 1][key] === null ? "M" : "L"}${X(i - .5)} ${Y(s[key])}H${X(i + .5)}`)).join("");
     g += `<path d="${path("ucl")}" fill="none" stroke="var(--limit)" stroke-width="1.2" stroke-dasharray="5 3"/><path d="${path("lcl")}" fill="none" stroke="var(--limit)" stroke-width="1.2" stroke-dasharray="5 3"/>`;
   }
   lines.forEach((l) => { g += `<line x1="${pad.l}" x2="${w - pad.r}" y1="${Y(l.y)}" y2="${Y(l.y)}" stroke="${l.color}" stroke-width="1.2" ${l.dash ? `stroke-dasharray="${l.dash}"` : ""}/><text x="${w - pad.r - 2}" y="${Y(l.y) - 4}" text-anchor="end" style="fill:${l.color};font-weight:600">${l.label}</text>`; });
-  g += `<path d="${points.map((p, i) => `${i ? "L" : "M"}${X(i)} ${Y(p.y)}`).join("")}" fill="none" stroke="var(--gray-500)" stroke-width="1.2"/>`;
+  g += `<path d="${points.map((p, i) => `${i ? "L" : "M"}${X(i)} ${Y(p.y)}`).join("")}" fill="none" stroke="#5d6670" stroke-width="1.2"/>`;
   points.forEach((p, i) => {
     const t = esc(pointTip ? pointTip(p, i) : `${p.y}`);
     g += p.out
-      ? `<path d="M${X(i)} ${Y(p.y) - 5}L${X(i) + 5} ${Y(p.y)}L${X(i)} ${Y(p.y) + 5}L${X(i) - 5} ${Y(p.y)}Z" fill="var(--accent-600)" stroke="var(--gray-0)" stroke-width=".8" data-tip="${t}"><title>${t}</title></path>`
-      : `<circle cx="${X(i)}" cy="${Y(p.y)}" r="${points.length > 300 ? 1.6 : 2.6}" fill="var(--gray-700)" data-tip="${t}"><title>${t}</title></circle>`;
+      ? `<path d="M${X(i)} ${Y(p.y) - 5}L${X(i) + 5} ${Y(p.y)}L${X(i)} ${Y(p.y) + 5}L${X(i) - 5} ${Y(p.y)}Z" fill="var(--limit)" stroke="#fff" stroke-width=".8" data-tip="${t}"><title>${t}</title></path>`
+      : `<circle cx="${X(i)}" cy="${Y(p.y)}" r="${points.length > 300 ? 1.6 : 2.6}" fill="#2f3a45" data-tip="${t}"><title>${t}</title></circle>`;
   });
   g += `<text x="12" y="${pad.t + (h - pad.t - pad.b) / 2}" transform="rotate(-90 12 ${pad.t + (h - pad.t - pad.b) / 2})" text-anchor="middle">${esc(yLabel)}</text>`;
   return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(yLabel)} control chart">${g}</svg>`;
 }
-const chartLegend = `<div class="legend"><span class="item"><svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="3" fill="var(--gray-700)"/></svg>In limits</span>
-  <span class="item"><svg width="12" height="12" aria-hidden="true"><path d="M6 1L11 6L6 11L1 6Z" fill="var(--accent-600)"/></svg>Outside limits</span>
-  <span class="item"><svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke="var(--limit)" stroke-dasharray="5 3" stroke-width="1.5"/></svg>UCL / LCL</span>
-  <span class="item"><svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke="var(--mean)" stroke-width="1.5"/></svg>Center line</span></div>`;
+const chartLegend = `<div class="legend"><span class="item"><svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="3" fill="#2f3a45"/></svg>In limits</span>
+  <span class="item"><svg width="12" height="12" aria-hidden="true"><path d="M6 1L11 6L6 11L1 6Z" fill="#d1342c"/></svg>Outside limits</span>
+  <span class="item"><svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke="#d1342c" stroke-dasharray="5 3" stroke-width="1.5"/></svg>UCL / LCL</span>
+  <span class="item"><svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke="#2f3a45" stroke-width="1.5"/></svg>Center line</span></div>`;
 
 // ---------------------------------------------------------- Data Analysis
 function pageAnalysis(el) {
@@ -718,14 +711,14 @@ function tabFmea(el) {
   const Yc = (v) => pad.t + (h - pad.t - pad.b) * (1 - v / 100);
   let svg = `<line class="axis" x1="${pad.l}" x2="${w - pad.r}" y1="${h - pad.b}" y2="${h - pad.b}"/>`;
   for (let k = 0; k <= 4; k++) svg += `<text x="${pad.l - 6}" y="${Yb((k * maxV) / 4) + 4}" text-anchor="end">${Math.round((k * maxV) / 4)}</text><text x="${w - pad.r + 6}" y="${Yc(k * 25) + 4}">${k * 25}%</text><line class="grid" x1="${pad.l}" x2="${w - pad.r}" y1="${Yb((k * maxV) / 4)}" y2="${Yb((k * maxV) / 4)}"/>`;
-  svg += `<line x1="${pad.l}" x2="${w - pad.r}" y1="${Yc(80)}" y2="${Yc(80)}" stroke="var(--gray-500)" stroke-dasharray="3 3"/><text x="${w - pad.r - 4}" y="${Yc(80) - 4}" text-anchor="end">80%</text>`;
+  svg += `<line x1="${pad.l}" x2="${w - pad.r}" y1="${Yc(80)}" y2="${Yc(80)}" stroke="#8a939c" stroke-dasharray="3 3"/><text x="${w - pad.r - 4}" y="${Yc(80) - 4}" text-anchor="end">80%</text>`;
   par.forEach((p, i) => {
-    svg += `<rect x="${pad.l + i * bw + bw * .15}" y="${Yb(p.value)}" width="${bw * .7}" height="${h - pad.b - Yb(p.value)}" fill="${i === 0 ? "var(--accent-700)" : "var(--accent-300)"}" rx="2" data-tip="${esc(`${p.name}: RPN ${p.value} (${p.pct.toFixed(0)}%, cumulative ${p.cum_pct.toFixed(0)}%)`)}"/>
-      <text x="${pad.l + i * bw + bw / 2}" y="${Yb(p.value) - 4}" text-anchor="middle" style="font-weight:600;fill:var(--gray-900)">${p.value}</text>
+    svg += `<rect x="${pad.l + i * bw + bw * .15}" y="${Yb(p.value)}" width="${bw * .7}" height="${h - pad.b - Yb(p.value)}" fill="${i === 0 ? "#d1342c" : "#5d6670"}" rx="2" data-tip="${esc(`${p.name}: RPN ${p.value} (${p.pct.toFixed(0)}%, cumulative ${p.cum_pct.toFixed(0)}%)`)}"/>
+      <text x="${pad.l + i * bw + bw / 2}" y="${Yb(p.value) - 4}" text-anchor="middle" style="font-weight:600;fill:#1d2125">${p.value}</text>
       <text x="${pad.l + i * bw + bw / 2}" y="${h - pad.b + 16}" text-anchor="middle">${esc(p.name)}</text>`;
   });
-  svg += `<path d="${par.map((p, i) => `${i ? "L" : "M"}${pad.l + i * bw + bw / 2} ${Yc(p.cum_pct)}`).join("")}" fill="none" stroke="var(--gray-700)" stroke-width="1.8"/>`;
-  par.forEach((p, i) => { svg += `<rect x="${pad.l + i * bw + bw / 2 - 3.5}" y="${Yc(p.cum_pct) - 3.5}" width="7" height="7" fill="var(--gray-700)"/>`; });
+  svg += `<path d="${par.map((p, i) => `${i ? "L" : "M"}${pad.l + i * bw + bw / 2} ${Yc(p.cum_pct)}`).join("")}" fill="none" stroke="#2c6fbf" stroke-width="1.8"/>`;
+  par.forEach((p, i) => { svg += `<rect x="${pad.l + i * bw + bw / 2 - 3.5}" y="${Yc(p.cum_pct) - 3.5}" width="7" height="7" fill="#2c6fbf"/>`; });
   svg += `<text x="12" y="${h / 2}" transform="rotate(-90 12 ${h / 2})" text-anchor="middle">RPN</text><text x="${w - 8}" y="${h / 2}" transform="rotate(90 ${w - 8} ${h / 2})" text-anchor="middle">cumulative %</text>`;
   el.innerHTML = `<div class="stack">
     <div><h2>Failure modes and effects · RPN = Severity × Occurrence × Detection</h2>
@@ -733,10 +726,10 @@ function tabFmea(el) {
     <div class="table-wrap" style="max-height:none"><table><thead><tr><th>Failure mode</th><th>Effect</th><th>Evidence in the data</th><th class="num">Rate</th><th>S</th><th>O</th><th>D</th><th class="num">RPN</th></tr></thead><tbody>
       ${rows.map((r) => `<tr><td><b>${esc(r.mode)}</b></td><td>${esc(r.effect)}</td><td class="small">${r.count.toLocaleString()} of ${r.opportunities.toLocaleString()} ${esc(r.evidence)}</td><td class="num">${(100 * r.rate).toFixed(2)}%</td>
         ${["S", "O", "D"].map((k) => `<td><input type="number" min="1" max="10" step="1" value="${r[k]}" data-fm="${esc(r.mode)}" data-k="${k}" aria-label="${k} for ${esc(r.mode)}"></td>`).join("")}
-        <td class="num"><b>${r.rpn ?? `<span style="color:var(--danger-text)">${esc(r.err)}</span>`}</b></td></tr>`).join("")}
+        <td class="num"><b>${r.rpn ?? `<span style="color:#a51d16">${esc(r.err)}</span>`}</b></td></tr>`).join("")}
     </tbody></table></div>
     <div class="row"><button id="fm-reset">Reset to data-based scores</button><span class="small muted">Occurrence scale: ${S.data.fmea.scale.map((s) => `≥${(100 * s.min_rate).toString()}% → ${s.score}`).join(", ")}, otherwise 1.</span></div>
-    <div class="card"><div class="card-h"><h2>Pareto chart · fix the tallest bar first</h2><div class="legend"><span class="item"><svg width="12" height="12"><rect width="12" height="12" fill="var(--accent-700)" rx="2"/></svg>Top priority</span><span class="item"><svg width="12" height="12"><rect width="12" height="12" fill="var(--accent-300)" rx="2"/></svg>RPN</span><span class="item"><svg width="12" height="12"><rect x="2" y="2" width="8" height="8" fill="var(--gray-700)"/></svg>Cumulative %</span></div></div>
+    <div class="card"><div class="card-h"><h2>Pareto chart · fix the tallest bar first</h2><div class="legend"><span class="item"><svg width="12" height="12"><rect width="12" height="12" fill="#d1342c" rx="2"/></svg>Top priority</span><span class="item"><svg width="12" height="12"><rect width="12" height="12" fill="#5d6670" rx="2"/></svg>RPN</span><span class="item"><svg width="12" height="12"><rect x="2" y="2" width="8" height="8" fill="#2c6fbf"/></svg>Cumulative %</span></div></div>
       <div class="card-b"><svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Pareto chart of RPN">${svg}</svg>
       <p class="howto">The silent feed scores high on Detection: a stale reading still looks healthy, so nobody is sent until a rider complains.</p></div></div>
   </div>`;
