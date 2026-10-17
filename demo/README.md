@@ -17,6 +17,13 @@ begins rebalanced (see [the codebook](../data/README.md#commuter-flow-and-overni
 
 ## 1. `normal_week / seed 1`: an ordinary three weeks
 
+0. **Network Overview** (the page the site opens on; click **Dock Watch** at the
+   top left to come back). Status strip: 5 empty stations, 0 full, 0 out of
+   service, 53% of docks available (246 of 461). Stations at risk: the top 5
+   of 9 are S22 Jackson Square, S30 Sullivan Square, S28 Bunker Hill Monument,
+   S19 L St & E Broadway and S24 Green Street, all empty now (red rows, Risk
+   100%, Now). Click a row to open that station on the map. The cards below
+   link to each page; Maintenance shows a mean time to repair of 1 h 17 min.
 1. **Map** (`#map`). A muted street map of Boston with bright station markers.
    At 08:15 Back Bay and Downtown are mostly blue squares (high) and green
    circles (medium); South Boston, Jamaica Plain and Charlestown are mostly
@@ -69,6 +76,10 @@ Thursday that was worse than the Tuesday baseline. Repeat offenders: S16, S15, S
 
 ## 4. `high_failure_week / seed 2`
 
+- **Network Overview, Wed 08:15**: 6 empty, 5 full, 1 out of service, 44% of
+  docks available. The top row is S05 Post Office Square (*Broken kiosk · 3
+  broken docks*), so offline stations and broken docks rank alongside
+  forecast empties and fulls, in the same order as the Dispatch table.
 - **Map, Wed 08:15**: S05 Post Office Square is a dark gray ✕ (broken kiosk).
   At **Wed 17:30** S01 (broken kiosk) and S28 (offline) are ✕.
 - **Map, Wed 12:00**: the top bar shows 1 stale feed: S17 is a silent feed.

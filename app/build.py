@@ -137,6 +137,25 @@ def hist_fill(polls, now, minutes_ahead, window=2):
     return qc.mean(vals) if vals else None
 
 
+STATUS_TEXT = {"offline": "Offline", "broken_kiosk": "Broken kiosk", "blocked": "Blocked",
+               "maintenance": "Under maintenance"}
+
+
+def hist_unusable(polls, now, minutes_ahead=120):
+    """Unusable flags for every poll in the next `minutes_ahead` minutes at the same
+    weekday and time in earlier weeks (only polls before `now`)."""
+    flags = []
+    for weeks_back in (1, 2, 3):
+        start = now - timedelta(weeks=weeks_back)
+        for k in range(1, minutes_ahead // 5 + 1):
+            ts = start + timedelta(minutes=5 * k)
+            j = int((ts - polls[0]["time"]).total_seconds() // 300)
+            if 0 <= j < len(polls) and polls[j]["time"] < now:
+                q = polls[j]
+                flags.append((not q["active"]) or q["ba"] == 0 or q["da"] == 0)
+    return flags
+
+
 def snapshot(now, stations, polls, faults, orders, vans):
     byid = {s["station_id"]: s for s in stations}
     t0 = polls[stations[0]["station_id"]][0]["time"]
@@ -202,13 +221,47 @@ def snapshot(now, stations, polls, faults, orders, vans):
             item["impact_bikes"] = r(abs((hh - h0) * p["eff"]), 1) if h0 is not None and hh is not None else 0
             item["risk"] = now_risk or (item[f"risk{first}"] if first else None)
             fc.append(item)
-    fc.sort(key=lambda i: (-i["urgency"], -(i["impact_bikes"] or 0)))
-    for rank, i in enumerate(fc, 1):
-        i["rank"] = rank
+    # stations at risk: the forecast list plus out-of-service stations, each with
+    # its issues and a risk %, ranked once (qc.rank_at_risk) for Overview and Dispatch
+    rows_by_id = {row["id"]: row for row in rows}
+    have = {i["id"] for i in fc}
+    for st in stations:
+        sid = st["station_id"]
+        if sid not in have:  # out of service (or every dock broken): unusable now
+            p = polls[sid][idx]
+            item = {"id": sid, "bikes": p["ba"] + p["bd"], "eff": p["eff"], "hist_now": None,
+                    "risk_now": "out_of_service", "risk": "out_of_service", "urgency": 5, "minutes_to_hit": 0,
+                    "impact_bikes": float(st["total_docks"])}
+            for m in HORIZONS:
+                item.update({f"p{m}": None, f"risk{m}": None, f"hist{m}": None, f"actual{m}": None})
+            fc.append(item)
+    for i in fc:
+        row, st = rows_by_id[i["id"]], byid[i["id"]]
+        i["status"], i["docks_disabled"], i["total_docks"] = row["status"], row["docks_disabled"], st["total_docks"]
+        issues = []
+        if row["status"] != "active":
+            issues.append(STATUS_TEXT[row["status"]])
+        elif i["risk_now"]:
+            issues.append(f"{i['risk_now'].capitalize()} now")
+        elif i["risk"]:
+            issues.append(f"Will be {i['risk']}")
+        if row["docks_disabled"]:
+            issues.append(f"{row['docks_disabled']} broken dock{'s' if row['docks_disabled'] > 1 else ''}")
+            if i["urgency"] == 0:  # usable, but broken docks need a repair: medium if a quarter or more are broken
+                i["urgency"] = 3 if row["docks_disabled"] >= 0.25 * st["total_docks"] else 1
+                i["minutes_to_hit"] = 0
+        i["issues"] = issues
+        i["priority"] = ("high" if i["urgency"] >= 4 else "medium" if i["urgency"] >= 2
+                         else "low" if i["urgency"] == 1 else "none")
+        unusable_now = row["status"] != "active" or i["risk_now"] is not None
+        i["risk_pct"] = 100.0 if unusable_now else r(qc.risk_pct(hist_unusable(polls[i["id"]], now)), 1)
+    qc.rank_at_risk(fc)
 
     # recommended moves: surplus (projected +60 min) to nearest deficit
     surplus, deficit = {}, {}
     for i in fc:
+        if i["status"] != "active":
+            continue
         target = round(0.5 * i["eff"])
         ahead = i["p60"] if i["p60"] is not None else i["bikes"]
         if i["risk"] == "full" or ahead > 0.8 * i["eff"]:
@@ -265,7 +318,9 @@ def snapshot(now, stations, polls, faults, orders, vans):
     offenders = sorted(({"station": k, "repairs": v} for k, v in all_counts.items() if v >= threshold),
                        key=lambda d: -d["repairs"])
     backlog = [o for o in active if o["order_type"] == "repair"]
-    return {"time": now.strftime(FMT), "stations": rows, "docks": docks, "forecast": fc,
+    summary = qc.network_summary([{**row, "total_docks": byid[row["id"]]["total_docks"]} for row in rows])
+    summary["docks_available_pct"] = r(summary["docks_available_pct"], 1)
+    return {"time": now.strftime(FMT), "summary": summary, "stations": rows, "docks": docks, "forecast": fc,
             "moves": moves,
             "tasks": {"repair": [o["order_id"] for o in active if o["order_type"] == "repair"],
                       "rebalance": [o["order_id"] for o in active if o["order_type"] == "rebalance"]},

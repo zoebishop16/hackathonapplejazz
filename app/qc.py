@@ -319,6 +319,59 @@ def mtbf_mttr(operating_hours, repair_minutes):
     return operating_hours / len(repair_minutes), mean(repair_minutes) / 60
 
 
+# ------------------------------------------------------- network overview
+
+def network_summary(stations):
+    """Network status right now, from one snapshot's station rows.
+
+    stations: dicts with status, bikes_available, docks_available,
+    docks_disabled, total_docks.
+    Counts are from a rider's view, the same rule as the at-risk list:
+    empty = in service with 0 rentable bikes; full = in service with 0 open
+    docks; out of service = status is not active. Also stations with broken
+    docks, and docks_available_pct = open docks at in-service stations / all
+    docks installed x 100 (None when there are no docks).
+    """
+    total = sum(s["total_docks"] for s in stations)
+    open_docks = sum(s["docks_available"] for s in stations if s["status"] == "active")
+    return {
+        "stations": len(stations),
+        "empty": sum(1 for s in stations if s["status"] == "active" and s["bikes_available"] == 0),
+        "full": sum(1 for s in stations if s["status"] == "active" and s["docks_available"] == 0),
+        "out_of_service": sum(1 for s in stations if s["status"] != "active"),
+        "broken_dock_stations": sum(1 for s in stations if s["docks_disabled"] > 0),
+        "docks_available": open_docks,
+        "docks_total": total,
+        "docks_available_pct": 100 * open_docks / total if total else None,
+    }
+
+
+def risk_pct(unusable_flags):
+    """Risk % = share of comparable past polls when the station was unusable.
+
+    unusable_flags: one True/False per poll in the same weekday-and-time window
+    of earlier weeks (True = out of service, 0 bikes or 0 open docks).
+    None when there is no history.
+    """
+    flags = list(unusable_flags)
+    if not flags:
+        return None
+    return 100 * sum(1 for f in flags if f) / len(flags)
+
+
+def rank_at_risk(items):
+    """Rank stations for action: most urgent first, then biggest impact, then risk %.
+
+    items: dicts with urgency (0-5), impact_bikes and risk_pct. Sorts in
+    place, writes rank = 1, 2, ... and returns the list. The Overview and the
+    Dispatch forecast table both use this one order.
+    """
+    items.sort(key=lambda i: (-i["urgency"], -(i.get("impact_bikes") or 0), -(i.get("risk_pct") or 0), i["id"]))
+    for n, i in enumerate(items, 1):
+        i["rank"] = n
+    return items
+
+
 # ---------------------------------------------------------------- forecast
 
 def forecast_bikes(bikes_now, capacity, hist_fill_now, hist_fill_later, margin=None):

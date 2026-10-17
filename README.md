@@ -55,7 +55,7 @@ Full endpoint list with example bodies: [`app/README.md`](app/README.md).
 | Kind | Endpoints |
 |---|---|
 | about | `GET /`, `GET /health`, `GET /docs` |
-| test datasets | `GET /datasets`, then `/datasets/{id}/` + `stations`, `stations/{station}`, `heatmap`, `forecast`, `dispatch`, `maintenance`, `xbar`, `imr`, `pchart`, `fmea`, `reliability` |
+| test datasets | `GET /datasets`, then `/datasets/{id}/` + `overview`, `stations`, `stations/{station}`, `heatmap`, `forecast`, `dispatch`, `maintenance`, `xbar`, `imr`, `pchart`, `fmea`, `reliability` |
 | your own numbers | `POST /compute/` + `fill`, `stockouts`, `xbar`, `pchart`, `fmea`, `reliability`, `availability`, `forecast` |
 
 Example: is a station's "full" real?
@@ -68,12 +68,16 @@ curl -X POST http://localhost:8000/compute/fill -H "content-type: application/js
 returns effective capacity 8, fill 75% ("high"), naive fill 50%, and the flag
 `looks_emptier`: the 4 broken docks hide how full it really is.
 
-## The four pages
+## The five pages
+
+The site opens on the **Network Overview**; click **Dock Watch** at the top
+left from any page to return to it.
 
 | Page | What it shows | How to read it |
 |---|---|---|
+| **Network Overview** | what is going wrong right now, where, and where to go next: a status strip (empty, full and out-of-service stations now, % of docks available), the top 5 stations at risk, and one card per page with its key number | red rows are high priority; Risk % = how often the station was empty, full or out of service in the next 2 hours at this weekday and time in earlier weeks (100% when it already is); click a row to open the station on the map |
 | **Map** | a muted street map of Boston (OpenStreetMap, desaturated so markers stand out) with every station colored *and shaped* by fill level, and the 8 vans; filters by district, status, time of last update, open docks, problem stations only; click a station for fill %, bikes, effective capacity, broken docks. Below it, the hour × weekday heatmap with the same filters | ▽ red empty, ◇ orange low, ● green medium, ■ blue high, ▲ purple full, ✕ dark gray out of service; a dashed ring marks a problem station, `!` a misleading fill. Dark weekday 7-9 AM and 4-6 PM heatmap cells are the rush pattern |
-| **Dispatch** | the forecast first (subheading: ranked by priority, then expected impact): every station ranked by priority, projected bikes at +30 min, 1 h, 1.5 h and 2 h, at-risk rows in red, checked against what happened. Then light-blue summary boxes (moves, open tasks, vans available, resolution time), recommended pickup → drop-off moves, a form to create a rebalancing task by hand, a task queue with Repair and Rebalancing tabs, and van status | only available vans (idle, not already assigned, with room for the bikes) are offered, nearest to the pick-up first; assignments are saved in your browser |
+| **Dispatch** | the forecast first (subheading: ranked by priority, then expected impact; offline stations and broken docks are ranked in too, the same order the Overview uses): every station ranked by priority, projected bikes at +30 min, 1 h, 1.5 h and 2 h, at-risk rows in red, checked against what happened. Then light-blue summary boxes (moves, open tasks, vans available, resolution time), recommended pickup → drop-off moves, a form to create a rebalancing task by hand, a task queue with Repair and Rebalancing tabs, and van status | only available vans (idle, not already assigned, with room for the bikes) are offered, nearest to the pick-up first; assignments are saved in your browser |
 | **Maintenance** | light-blue dock-health percentage boxes (broken docks, broken bikes, effective capacity, misleading fill, repeat offenders) and a table with a square for every dock (bike, broken bike, open, faulty ×, bike stuck !, never locks ∅) | ⚠ before a station name = misleading fill; the right-hand column is the repeat-offender report (3+ unplanned repairs and at least twice the network median) |
 | **Data Analysis** | tabs: FMEA (editable S/O/D, Pareto by RPN) and Control Charts (X-bar by 3-hour block, p-chart) | under each chart: the formula, how many points fall outside, and what the subgroup is |
 
@@ -107,6 +111,8 @@ real system would get the first two from its public GBFS feed.
 | `rpn`, `occurrence_score`, `pareto` | RPN = S × O × D; observed rate → occurrence 1-10; Pareto order |
 | `median`, `repeat_offender_threshold` | repairs needed to be a repeat offender: max(3, 2 × network median) |
 | `series`, `parallel`, `availability`, `mtbf_mttr` | R₁R₂…; 1 − Π(1 − Rᵢ); MTBF/(MTBF + MTTR) (API only) |
+| `network_summary(stations)` | Overview status strip: empty (0 rentable bikes), full (0 open docks), out of service, stations with broken docks, % of docks available |
+| `risk_pct(flags)`, `rank_at_risk(items)` | Risk % from earlier weeks; one ranking (urgency, then impact, then risk %) shared by Overview and Dispatch |
 | `forecast_bikes(...)` | bikes now + (historical fill later − historical fill now) × capacity, at +30 min, 1 h, 1.5 h, 2 h |
 
 How the charts are set up:

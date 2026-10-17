@@ -30,6 +30,7 @@ GET: results for the four test datasets. `{id}` is one of `normal_week__seed_1`,
 |---|---|
 | `/health` | `{"status": "ok", "datasets": 4}` |
 | `/datasets` | datasets and their snapshot keys |
+| `/datasets/{id}/overview` | Network Overview: status-strip summary and the top stations at risk (`top`, default 5) with issues, risk % and minutes to the event |
 | `/datasets/{id}/stations` | every station at a snapshot (fill %, category, bikes, effective capacity, broken docks, flags); filters `district`, `status`, `max_feed_age`, `stale_only`, `min_open_docks`, `problem_only` |
 | `/datasets/{id}/stations/{station}` | one station with its dock grid, forecast, reliability and repair tickets |
 | `/datasets/{id}/heatmap` | 7 × 24 grid; `metric` = `empty`, `full`, `unusable` or `fill`; same filters |

@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from app.qc import (availability, median, most_common_n, repeat_offender_threshold, effective_capacity, event_log, fill_category, fill_pct,
+from app.qc import (availability, median, most_common_n, network_summary, rank_at_risk, risk_pct, repeat_offender_threshold, effective_capacity, event_log, fill_category, fill_pct,
                     forecast_bikes, misleading_flag, mtbf_mttr, occurrence_score,
                     p_chart, parallel, pareto, rpn, series, xbar_chart)
 
@@ -194,3 +194,38 @@ def test_median_and_repeat_threshold():
     assert repeat_offender_threshold([10, 12, 12, 14, 40]) == 24    # bad week: 2 x median 12
     with pytest.raises(ValueError):
         repeat_offender_threshold([])
+
+
+# ---- overview
+
+def test_network_summary_known_answer():
+    rows = [
+        {"status": "active", "bikes_available": 0, "docks_available": 10, "docks_disabled": 0, "total_docks": 10},
+        {"status": "active", "bikes_available": 10, "docks_available": 0, "docks_disabled": 2, "total_docks": 12},
+        {"status": "offline", "bikes_available": 0, "docks_available": 5, "docks_disabled": 0, "total_docks": 8},
+        {"status": "active", "bikes_available": 4, "docks_available": 5, "docks_disabled": 1, "total_docks": 10},
+    ]
+    s = network_summary(rows)
+    # the offline station has 0 bikes but counts as out of service, not empty
+    assert (s["empty"], s["full"], s["out_of_service"], s["broken_dock_stations"]) == (1, 1, 1, 2)
+    # open docks at in-service stations: 10 + 0 + 5 = 15 of 40 installed; the offline station's 5 do not count
+    assert s["docks_available"] == 15 and s["docks_total"] == 40 and s["docks_available_pct"] == 37.5
+
+
+def test_network_summary_degenerate():
+    assert network_summary([])["docks_available_pct"] is None
+
+
+def test_risk_pct():
+    assert risk_pct([True, False, False, True]) == 50.0
+    assert risk_pct([False] * 5) == 0.0
+    assert risk_pct([]) is None
+
+
+def test_rank_at_risk_order():
+    items = [{"id": "A", "urgency": 1, "impact_bikes": 9, "risk_pct": 90},
+             {"id": "B", "urgency": 5, "impact_bikes": 1, "risk_pct": 10},
+             {"id": "C", "urgency": 5, "impact_bikes": 3, "risk_pct": 0},
+             {"id": "D", "urgency": 5, "impact_bikes": 3, "risk_pct": 40}]
+    assert [i["id"] for i in rank_at_risk(items)] == ["D", "C", "B", "A"]
+    assert [i["rank"] for i in items] == [1, 2, 3, 4]

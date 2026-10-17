@@ -6,6 +6,7 @@ import { rpn, pareto } from "./calc.js";
 
 // ------------------------------------------------------------------ constants
 const PAGES = [
+  { id: "overview", title: "Network Overview", nav: "Overview", sub: "Track dock availability, find unusable stations, and decide where to send vans.", icon: "M3 3h6v6H3zM11 3h6v4h-6zM11 9h6v8h-6zM3 11h6v6H3z" },
   { id: "map", title: "Map", icon: "M10 2a6 6 0 0 0-6 6c0 4.5 6 10 6 10s6-5.5 6-10a6 6 0 0 0-6-6zm0 8.2A2.2 2.2 0 1 1 10 5.8a2.2 2.2 0 0 1 0 4.4z" },
   { id: "dispatch", title: "Dispatch", icon: "M1 6h11v8H1zM12 9h4l3 3v2h-7zM5 16.5a1.5 1.5 0 1 0 0-.01M15 16.5a1.5 1.5 0 1 0 0-.01" },
   { id: "maintenance", title: "Maintenance", icon: "M13.5 2.5a4 4 0 0 0-4.9 5.2L2.5 13.8l3.7 3.7 6.1-6.1a4 4 0 0 0 5.2-4.9l-2.4 2.4-2.5-.6-.6-2.5z" },
@@ -106,12 +107,14 @@ document.addEventListener("mousemove", (e) => {
 // --------------------------------------------------------------------- shell
 function renderNav() {
   $("#nav").innerHTML = PAGES.map((p) => `<a href="#${p.id}" ${p.id === S.page ? 'aria-current="page"' : ""} title="${p.title}">
-      <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="${p.icon}" ${p.stroke ? 'fill="none" stroke="currentColor" stroke-width="1.8"' : 'fill="currentColor"'} /></svg><span>${p.title}</span></a>`).join("");
+      <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="${p.icon}" ${p.stroke ? 'fill="none" stroke="currentColor" stroke-width="1.8"' : 'fill="currentColor"'} /></svg><span>${p.nav || p.title}</span></a>`).join("");
 }
 
 function renderTop() {
   const page = PAGES.find((p) => p.id === S.page);
   $("#page-title").textContent = page.title;
+  $("#page-sub").textContent = page.sub || "";
+  $("#page-sub").hidden = !page.sub;
   document.title = `${page.title} · Dock Watch`;
   const ds = $("#dataset");
   ds.innerHTML = S.index.map((d) => `<option value="${d.id}" ${d.id === S.datasetId ? "selected" : ""}>${esc(d.label)}</option>`).join("");
@@ -140,7 +143,7 @@ function render() {
     return;
   }
   try {
-    ({ map: pageMapAll, dispatch: pageDispatchAll, maintenance: pageMaintenanceAll, analysis: pageAnalysis })[S.page](el);
+    ({ overview: pageOverview, map: pageMapAll, dispatch: pageDispatchAll, maintenance: pageMaintenanceAll, analysis: pageAnalysis })[S.page](el);
   } catch (err) {
     console.error(err);
     el.innerHTML = `<div class="card state error" role="alert"><p><b>This page failed to draw.</b></p><p class="mono">${esc(err.message)}</p></div>`;
@@ -192,6 +195,79 @@ function passes(r) {
   return true;
 }
 function filteredIds() { return snapData().stations.filter(passes).map((r) => r.id); }
+
+// ------------------------------------------------ shared by Overview + Dispatch
+// When the station hits trouble: "Now" for anything already wrong, else the forecast horizon.
+function timeUntil(i) {
+  if (!i.urgency) return "—";
+  return i.urgency === 5 || i.minutes_to_hit === 0 ? "Now" : hLabel(i.minutes_to_hit);
+}
+function riskBadge(i) {
+  if (i.risk === "empty" || i.risk === "full" || i.risk === "out_of_service") return catBadge(i.risk);
+  return i.issues && i.issues.length ? `<span class="badge warn">${esc(i.issues.join(" · "))}</span>` : `<span class="muted small">—</span>`;
+}
+// Rebalancing tasks still open at this snapshot: van jobs in progress plus the
+// recommended and manual tasks assigned in this browser and not yet confirmed.
+function openRebalanceTasks() {
+  const snap = snapData();
+  const fromData = snap.tasks.rebalance.filter((id) => !S.local.done[localKey(id)]).length;
+  const moves = snap.moves.filter((m, k) => S.local.assigned[localKey(`move${k}`)] && !S.local.done[localKey(`move${k}`)]).length;
+  const manual = manualTasks().filter((t) => !S.local.done[localKey(t.id)]).length;
+  return fromData + moves + manual;
+}
+function topFailureMode() {
+  const rows = fmeaRows().filter((r) => r.rpn !== null).sort((a, b) => b.rpn - a.rpn);
+  return rows[0] || null;
+}
+function openOnMap(id) {
+  const s = stationInfo(id);
+  S.selected = id;
+  S.mapView = { center: [s.lat, s.lon], zoom: 15 };
+  location.hash = "map";
+}
+
+// ----------------------------------------------------------------- Overview
+function pageOverview(el) {
+  const snap = snapData();
+  const sm = snap.summary;
+  const atRisk = snap.forecast.filter((i) => i.urgency > 0);
+  const top = atRisk.slice(0, 5);
+  const stat = (value, label, color) => `<div class="card kpi kpi-blue ov-stat"><div class="v" style="color:${color}">${value}</div><div class="l">${label}</div></div>`;
+  const issueIcon = (i) => markerSvg(i.status !== "active" ? "out_of_service" : i.risk === "full" ? "full" : i.risk === "empty" ? "empty" : "low", 5);
+  const tf = topFailureMode();
+  const card = (href, title, line, value) => `<a class="page-card" href="${href}"><div><div class="pc-title">${title}</div><div class="pc-line">${line}</div></div><div class="pc-num">${value}</div><span class="pc-arrow" aria-hidden="true">→</span></a>`;
+  el.innerHTML = `<div class="stack overview">
+    <div class="grid cols-4 ov-strip">
+      ${stat(sm.empty, "empty stations now<br><span>no rentable bikes</span>", CAT_COLOR.empty)}
+      ${stat(sm.full, "full stations now<br><span>no open docks</span>", CAT_COLOR.full)}
+      ${stat(sm.out_of_service, "out-of-service stations now", CAT_COLOR.out_of_service)}
+      ${stat(sm.docks_available_pct === null ? "—" : `${fmt(sm.docks_available_pct, 0)}%`, `of docks available<br><span>${sm.docks_available} of ${sm.docks_total}, network-wide</span>`, CAT_COLOR.medium)}
+    </div>
+    <div class="card ov-risk">
+      <div class="card-h"><h2>Stations at risk<span class="subhead">Top 5, in the same order as Dispatch · click a row to see it on the map</span></h2><a href="#dispatch" class="small">View all ${atRisk.length} →</a></div>
+      ${top.length ? `<div class="table-wrap" style="max-height:none"><table class="forecast"><thead><tr><th>Station</th><th>Issue</th><th class="num">Risk %</th><th>Time until event</th></tr></thead><tbody>
+        ${top.map((i) => `<tr class="${i.priority === "high" ? "risk-high" : "risk"} clickable" tabindex="0" role="link" data-open="${i.id}" aria-label="Open ${esc(stName(i.id))} on the map">
+          <td><b>${esc(stName(i.id))}</b><div class="small muted">${esc(stationInfo(i.id).district)}</div></td>
+          <td><span class="row" style="gap:6px;flex-wrap:nowrap">${issueIcon(i)}${esc(i.issues.join(" · "))}</span></td>
+          <td class="num"><b>${i.risk_pct === null ? "—" : `${fmt(i.risk_pct, 0)}%`}</b></td>
+          <td>${timeUntil(i)}</td></tr>`).join("")}
+      </tbody></table></div>
+      <p class="howto" style="margin:8px 14px 12px">Risk % = how often the station was empty, full or out of service in the next 2 hours at this weekday and time in earlier weeks (100% when it already is). Red rows are high priority.</p>`
+      : `<div class="state">No stations at risk right now.</div>`}
+    </div>
+    <div class="grid ov-cards">
+      ${card("#map", "Map", "stations empty or full now", sm.empty + sm.full)}
+      ${card("#dispatch", "Dispatch", "open rebalancing tasks", openRebalanceTasks())}
+      ${card("#maintenance", "Dock Health", "stations with broken docks", sm.broken_dock_stations)}
+      ${card("#maintenance", "Maintenance", "mean time to repair", snap.maintenance.mttr_min === null ? "—" : dur(snap.maintenance.mttr_min))}
+      ${card("#analysis", "Data Analysis", "top failure mode (FMEA)", tf ? `${esc(tf.mode)} <small>RPN ${tf.rpn}</small>` : "—")}
+    </div>
+  </div>`;
+  el.querySelectorAll("[data-open]").forEach((tr) => {
+    tr.addEventListener("click", () => openOnMap(tr.dataset.open));
+    tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openOnMap(tr.dataset.open); } });
+  });
+}
 
 // ----------------------------------------------------------------- Map page
 // Live map of Boston (Leaflet + the standard OpenStreetMap street layer, a
@@ -436,7 +512,6 @@ function vanSelect(attr, choices) {
 function pageDispatchAll(el) {
   const snap = snapData();
   const fc = snap.forecast;
-  const firstH = (i) => (i.urgency === 5 ? 0 : i.minutes_to_hit);
   const actualAt = (i) => (i.urgency === 5 ? i.actual30 : i.minutes_to_hit ? i[`actual${i.minutes_to_hit}`] : null);
   const check = (i) => {
     const act = actualAt(i);
@@ -524,7 +599,7 @@ function pageDispatchAll(el) {
         <div class="legend"><span class="item"><span class="swatch risk-high"></span>High priority (now or ≤ 30 min)</span><span class="item"><span class="swatch risk"></span>At risk within 2 h</span></div></div>
       <div class="table-wrap"><table class="forecast"><thead><tr><th class="num">Rank</th><th>Station</th><th>Priority</th><th>Risk</th><th>When</th><th class="num">Bikes now / eff.</th>${HORIZONS.map((m) => `<th class="num">+${m < 60 ? `${m} min` : `${m / 60} h`}</th>`).join("")}<th class="num">Impact (bikes)</th><th>Check</th></tr></thead>
       <tbody>${fc.map((i) => `<tr class="${i.priority === "high" ? "risk-high" : i.urgency > 0 ? "risk" : ""}"><td class="num">${i.rank}</td><td>${esc(stName(i.id))}<div class="small muted">${esc(stationInfo(i.id).district)}</div></td>
-        <td><span class="badge ${PRI[i.priority][1]}">${PRI[i.priority][0]}</span></td><td>${i.risk ? catBadge(i.risk === "empty" ? "empty" : "full") : `<span class="muted small">—</span>`}</td><td>${i.urgency ? hLabel(firstH(i)) : "—"}</td><td class="num">${i.bikes} / ${i.eff}</td>
+        <td><span class="badge ${PRI[i.priority][1]}">${PRI[i.priority][0]}</span></td><td>${riskBadge(i)}</td><td>${timeUntil(i)}</td><td class="num">${i.bikes} / ${i.eff}</td>
         ${HORIZONS.map((m) => `<td class="num ${i[`risk${m}`] ? "hit" : ""}">${fmt(i[`p${m}`], 1)}</td>`).join("")}<td class="num">${fmt(i.impact_bikes, 1)}</td><td>${check(i)}</td></tr>`).join("")}
       </tbody></table></div>
       <div class="card-b">
@@ -534,7 +609,7 @@ function pageDispatchAll(el) {
     </div>
     <div class="grid cols-4">
       <div class="card kpi kpi-blue"><div class="v">${snap.moves.length}</div><div class="l">recommended moves</div></div>
-      <div class="card kpi kpi-blue"><div class="v">${repairTasks.length + rebalCount}</div><div class="l">open tasks (${repairTasks.length} repair · ${rebalCount} rebalancing)</div></div>
+      <div class="card kpi kpi-blue"><div class="v">${repairTasks.length + openRebalanceTasks()}</div><div class="l">open tasks (${repairTasks.length} repair · ${openRebalanceTasks()} rebalancing)</div></div>
       <div class="card kpi kpi-blue"><div class="v">${nFree} / ${vans.length}</div><div class="l">vans available now</div></div>
       <div class="card kpi kpi-blue"><div class="v">${res.rebalance.median_min === null ? "—" : dur(res.rebalance.median_min)}</div><div class="l">median time to resolve a rebalance call (${res.rebalance.n} done)</div></div>
     </div>
@@ -729,8 +804,8 @@ async function loadDataset(id) {
 }
 
 function route() {
-  const id = location.hash.slice(1) || "map";
-  const page = PAGES.find((p) => p.id === (PAGE_ALIASES[id] || id)) || PAGES[0];
+  const id = location.hash.slice(1) || "overview";
+  const page = PAGES.find((p) => p.id === (PAGE_ALIASES[id] || id)) || PAGES[0];  // PAGES[0] = Overview
   S.page = page.id;
   render();
   $("#page").focus({ preventScroll: true });

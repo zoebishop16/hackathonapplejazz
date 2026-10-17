@@ -151,3 +151,21 @@ def test_forecast_horizons_and_priority():
 
 def test_eight_vans():
     assert len(client.get(f"/datasets/{DS}/dispatch").json()["vans"]) == 8
+
+
+def test_overview_matches_station_rows_and_ranking():
+    for ds in ("normal_week__seed_1", "high_failure_week__seed_2"):
+        o = client.get(f"/datasets/{ds}/overview", params={"snapshot": "wed-0815"}).json()
+        rows = client.get(f"/datasets/{ds}/stations", params={"snapshot": "wed-0815"}).json()["stations"]
+        sm = o["summary"]
+        assert sm["empty"] == sum(1 for r in rows if r["status"] == "active" and r["bikes_available"] == 0)
+        assert sm["full"] == sum(1 for r in rows if r["status"] == "active" and r["docks_available"] == 0)
+        assert sm["out_of_service"] == sum(1 for r in rows if r["status"] != "active")
+        open_docks = sum(r["docks_available"] for r in rows if r["status"] == "active")
+        assert sm["docks_available_pct"] == pytest.approx(100 * open_docks / sum(r["total_docks"] for r in rows), abs=0.05)
+        # top 5 = the first 5 of the Dispatch forecast ranking, and out-of-service stations are included
+        fc = client.get(f"/datasets/{ds}/forecast").json()["stations"]
+        assert [a["station"] for a in o["at_risk"]] == [f["id"] for f in fc][:5]
+        oos = {r["id"] for r in rows if r["status"] != "active"}
+        assert oos <= {f["id"] for f in fc}
+        assert all(a["risk_pct"] is None or 0 <= a["risk_pct"] <= 100 for a in o["at_risk"])

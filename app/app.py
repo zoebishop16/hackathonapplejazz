@@ -181,6 +181,26 @@ def stations(dataset_id: str, snapshot: Optional[str] = SnapshotQ, district: Opt
             "stations": [{**info[r["id"]], **r} for r in rows]}
 
 
+@app.get("/datasets/{dataset_id}/overview", tags=["datasets"])
+def overview(dataset_id: str, snapshot: Optional[str] = SnapshotQ, top: int = Query(5, ge=1, le=50)):
+    """The Network Overview: status strip numbers and the top stations at risk.
+
+    summary: empty (0 rentable bikes), full (0 open docks) and out-of-service
+    stations, stations with broken docks, and % of all docks available.
+    at_risk: the same ranking as /forecast (and the Dispatch table), with each
+    station's issues, risk % and minutes until the event (0 = now).
+    """
+    d = _dataset(dataset_id)
+    label, snap = _snap(d, snapshot)
+    info = _stations(d)
+    risky = [i for i in snap["forecast"] if i["urgency"] > 0]
+    return {"snapshot": label, "time": snap["time"], "summary": snap["summary"], "at_risk_total": len(risky),
+            "at_risk": [{"rank": i["rank"], "station": i["id"], "name": info[i["id"]]["name"],
+                         "district": info[i["id"]]["district"], "issues": i["issues"], "priority": i["priority"],
+                         "risk_pct": i["risk_pct"], "minutes_to_event": i["minutes_to_hit"]} for i in risky[:top]],
+            "mttr_min": snap["maintenance"]["mttr_min"]}
+
+
 @app.get("/datasets/{dataset_id}/stations/{station_id}", tags=["datasets"])
 def station(dataset_id: str, station_id: str, snapshot: Optional[str] = SnapshotQ):
     """One station: its state, its per-dock grid, its forecast and reliability."""
