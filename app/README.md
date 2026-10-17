@@ -60,3 +60,9 @@ POST: the same statistics on your own numbers (bad input → HTTP 422 with the r
 `qc.py` statistics (standard library only) · `app.py` the API · `build.py` data/ → `site/data/*.json` ·
 `site/` the dashboard · `manifest.json` Posit Connect bundle list · `requirements.txt` pinned API dependencies.
 The JSON in `site/data/` is committed because the API serves it; CI fails if it is stale.
+
+## Analyst and developer documentation
+
+The top navigation ends with **Docs** (analyst workflow) and **About** (team information placeholder). Click **Dock Watch** to return to Overview.
+
+See the [tool guide](../docs/TOOL_GUIDE.md) for setup, inputs, function signatures, parameter defaults, outputs and interpretation limits. Dashboard `#docs` is separate from API `/docs`. Hosting paths are unchanged.

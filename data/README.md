@@ -1,5 +1,7 @@
 # Data codebook
 
+For the comprehensive field reference, file inventories, joins, collection protocol, missingness rules and derived metrics, read [CODEBOOK.md](CODEBOOK.md). This page remains the short data overview.
+
 All data here is **synthetic** (invented, not real riders). It was made by
 [`scripts/generate_data.py`](../scripts/generate_data.py) with fixed seeds, so
 `python3 scripts/generate_data.py` rebuilds every file exactly, and
@@ -129,7 +131,7 @@ Identity on every row: `num_bikes_available + num_bikes_disabled +
 num_docks_available + num_docks_disabled = total_docks`.
 
 Derived in the tool: **effective capacity** = `total_docks - num_docks_disabled`;
-**fill %** = (`num_bikes_available + num_bikes_disabled`) / effective capacity;
+**fill %** = 100 ? (`num_bikes_available + num_bikes_disabled`) / effective capacity;
 **feed age** = `timestamp - last_reported` in minutes. A **silent feed** keeps
 repeating its last reading with an old `last_reported` while `status` still says
 `active`, so it looks healthy.

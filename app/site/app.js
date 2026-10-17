@@ -6,12 +6,14 @@ import { rpn, pareto } from "./calc.js";
 
 // ------------------------------------------------------------------ constants
 const PAGES = [
-  // the landing page: not in the sidebar; reached by opening the site or clicking "Dock Watch"
+  // the landing page: reached from the brand; reached by opening the site or clicking "Dock Watch"
   { id: "overview", title: "Network Overview", inNav: false, sub: "Track dock availability, find unusable stations, and decide where to send vans.", icon: "M3 3h6v6H3zM11 3h6v4h-6zM11 9h6v8h-6zM3 11h6v6H3z" },
   { id: "map", title: "Map", icon: "M10 2a6 6 0 0 0-6 6c0 4.5 6 10 6 10s6-5.5 6-10a6 6 0 0 0-6-6zm0 8.2A2.2 2.2 0 1 1 10 5.8a2.2 2.2 0 0 1 0 4.4z" },
   { id: "dispatch", title: "Dispatch", icon: "M1 6h11v8H1zM12 9h4l3 3v2h-7zM5 16.5a1.5 1.5 0 1 0 0-.01M15 16.5a1.5 1.5 0 1 0 0-.01" },
   { id: "maintenance", title: "Maintenance", icon: "M13.5 2.5a4 4 0 0 0-4.9 5.2L2.5 13.8l3.7 3.7 6.1-6.1a4 4 0 0 0 5.2-4.9l-2.4 2.4-2.5-.6-.6-2.5z" },
   { id: "analysis", title: "Data Analysis", icon: "M3 17V9h3v8zM8.5 17V4h3v13zM14 17v-6h3v6z" },
+  { id: "docs", title: "Docs", icon: "M3 2h10l4 4v12H3zM6 7h7v1H6zM6 11h8v1H6z" },
+  { id: "about", title: "About", icon: "M9 4h2v2H9zM9 8h2v8H9z" },
 ];
 // old page links land on the page that now holds them
 const PAGE_ALIASES = { stockouts: "map", docks: "maintenance", forecast: "dispatch", reliability: "analysis" };
@@ -135,6 +137,9 @@ function render() {
   renderNav();
   renderTop();
   const el = $("#page");
+  // Help pages remain usable even when a dataset cannot load.
+  if (S.page === "docs") { pageDocs(el); return; }
+  if (S.page === "about") { pageAbout(el); return; }
   if (S.error) {
     el.innerHTML = `<div class="card state error" role="alert"><p><b>Could not load data.</b></p><p>${esc(S.error)}</p><button class="primary" id="retry">Retry</button></div>`;
     $("#retry").onclick = () => loadDataset(S.datasetId);
@@ -357,7 +362,11 @@ function drawLeaflet(rows, keep) {
       title: `${r.id} ${s.name}`, alt: `${r.id} ${s.name}, ${CAT_LABEL[r.category]}`, riseOnHover: true,
       zIndexOffset: keep.has(r.id) ? 1000 : 0 })
       .bindTooltip(tip, { direction: "top", offset: [0, -14] })
-      .on("click", () => { S.selected = r.id; render(); })
+      .on("click", () => {
+        S.selected = r.id;
+        if (S.page === "docs") location.hash = "map";
+        else render();
+      })
       .addTo(map);
   });
 }
@@ -814,8 +823,6 @@ function route() {
 }
 
 async function init() {
-  $("#collapse").onclick = () => { $("#shell").classList.toggle("collapsed"); store.set("collapsed", $("#shell").classList.contains("collapsed")); };
-  if (store.get("collapsed", false)) $("#shell").classList.add("collapsed");
   $("#dataset").onchange = (e) => loadDataset(e.target.value);
   $("#snapshot").onchange = (e) => { S.snap = e.target.value; store.set("snapshot", S.snap); render(); };
   window.addEventListener("hashchange", route);
@@ -831,3 +838,104 @@ async function init() {
   await loadDataset(S.datasetId);
 }
 init();
+
+
+// Help combines explanatory text with the same snapshot values and marker shapes
+// used by operational pages. No statistical calculations are performed here.
+function docsDashboardVisuals() {
+  if (!S.data || S.loading || S.error) return `<div class="guide-notice">Choose a dataset once it loads to see dashboard examples here. The guide remains available below.</div>`;
+  const snap = snapData(), sm = snap.summary;
+  return `<div class="docs-visuals">
+    <figure class="card guide-figure"><figcaption><b>Your network at a glance</b><span>Network Overview · selected replay snapshot</span></figcaption>
+      <div class="docs-kpis">${[[sm.empty, 'Empty stations', 'empty'], [sm.full, 'Full stations', 'full'], [sm.out_of_service, 'Out of service', 'out_of_service'], [fmt(sm.docks_available_pct, 1) + '%', 'Docks available', 'medium']].map(([value, label, cat]) => `<div class="kpi kpi-blue"><div class="v" style="color:${CAT_COLOR[cat]}">${value}</div><div class="l">${label}</div></div>`).join('')}</div>
+      <p>Start with service failures, then open <a href="#overview">Network Overview</a> for the stations to investigate.</p></figure>
+    <figure class="card guide-figure"><figcaption><b>Read the station markers</b><span>Map · the dashboard's colors and shapes</span></figcaption>
+      ${fillLegend()}<div class="docs-station-sample">${snap.stations.slice(0, 4).map(r => `<div>${markerSvg(r.category, 9)}<span><b>${esc(stName(r.id))}</b><small>${esc(CAT_LABEL[r.category])} · ${fmt(r.fill_pct)}% fill · ${r.docks_available} open docks</small></span></div>`).join('')}</div>
+      <p>Examples from this snapshot. <a href="#map">Open Map</a> to inspect locations and filter the network.</p></figure>
+    <figure class="card guide-figure docs-forecast"><figcaption><b>From a warning to a decision</b><span>Dispatch · first three stations in the shared priority order</span></figcaption>
+      <div class="table-wrap"><table><thead><tr><th>Station</th><th>Current issue</th><th class="num">Bikes now</th><th class="num">+30 min</th><th class="num">+1 h</th><th class="num">+2 h</th></tr></thead><tbody>${snap.forecast.slice(0, 3).map(r => `<tr class="${r.urgency > 0 ? 'risk' : ''}"><td>${esc(stName(r.id))}</td><td>${esc(r.issues.join(', ') || 'No current issue')}</td><td class="num">${r.bikes}</td><td class="num">${fmt(r.p30, 1)}</td><td class="num">${fmt(r.p60, 1)}</td><td class="num">${fmt(r.p120, 1)}</td></tr>`).join('')}</tbody></table></div>
+      <p>Historical projections are early warnings, not guaranteed outcomes. <a href="#dispatch">Open Dispatch</a> for moves, vans and task queues.</p></figure>
+  </div>`;
+}
+
+function pageDocs(el) {
+  el.innerHTML = `<article class="guide docs-guide" aria-label="Analyst guide">
+    <header class="guide-intro"><span class="guide-eyebrow">THE ANALYST'S WORKFLOW</span><h2>Using Dock Watch as an analyst</h2><p>See the network. Understand the warning. Decide where to act.</p><p class="muted">A practical guide to rebalancing, maintenance and quality control. All demonstration data is synthetic; visuals below follow your selected dataset and snapshot.</p></header>
+    ${docsDashboardVisuals()}
+    ${docsOperationalPreviews()}
+    <div class="docs-steps">
+      <section class="card guide-step"><h2><span class="step-number">01</span> Set your comparison</h2><ul>
+        <li>Choose a <b>Dataset</b> and <b>Snapshot</b> in the top bar.<ul><li>Normal week provides a baseline; High failure week illustrates stressed operations.</li><li>Seeds are independent synthetic examples.</li><li>Snapshot is replay time, not a live feed.</li></ul></li>
+        <li>Keep the same snapshot when comparing scenarios.</li></ul></section>
+      <section class="card guide-step"><h2><span class="step-number">02</span> Triage the network</h2><ul>
+        <li>Click <b>Dock Watch</b> for Network Overview.<ul><li>Review empty, full and out-of-service counts.</li><li>Inspect the top five stations at risk; click a station row to open it on the Map.</li></ul></li>
+        <li>Read Risk % as the share of comparable earlier-week polls with unusable service over the next two hours.<ul><li>A currently unusable station is assigned 100%.</li><li>Missing history is not zero risk.</li></ul></li></ul></section>
+      <section class="card guide-step"><h2><span class="step-number">03</span> Inspect the Map</h2><ul>
+        <li>Narrow the view with filters.<ul><li>District, status and feed age.</li><li>Minimum open docks and problem stations.</li></ul></li>
+        <li>Select a marker to check bikes, effective capacity, broken docks and freshness.<ul><li>Shapes accompany colors; a dashed ring marks a problem.</li><li>Check stale feeds before acting.</li></ul></li>
+        <li>Use the hour-by-weekday heatmap to distinguish recurring rush-hour shortages from isolated failures.</li></ul></section>
+      <section class="card guide-step"><h2><span class="step-number">04</span> Plan Dispatch</h2><ul>
+        <li>Read the priority-ranked forecast at +30, +60, +90 and +120 minutes.<ul><li>Forecasts use historical average changes.</li><li>Review recommended pickup and drop-off moves.</li></ul></li>
+        <li>Select an available van or create a manual rebalance task.</li>
+        <li>Assignments and completion stay in this browser.<ul><li>They do not send instructions to a real fleet.</li><li>They do not synchronize with teammates.</li></ul></li></ul></section>
+      <section class="card guide-step"><h2><span class="step-number">05</span> Investigate Maintenance</h2><ul>
+        <li>Inspect dock-health summaries and individual dock states.<ul><li>Effective capacity excludes broken docks.</li><li>Broken bikes can still occupy usable docks.</li><li>Misleading-fill warnings explain hidden shortages.</li></ul></li>
+        <li>A station is flagged for recurring problems once it has needed at least three unplanned repairs and its repair count is at least twice the typical station?s count across the network (the median).</li></ul></section>
+      <section class="card guide-step"><h2><span class="step-number">06</span> Analyze recurring failures</h2><ul>
+        <li>Use <b>FMEA</b> to compare failure modes.<ul><li>Severity, occurrence and detection each range from 1 to 10.</li><li>RPN is their product; a larger detection score means harder detection.</li><li>Edits recalculate the Pareto ranking for this session and do not change CSVs.</li></ul></li>
+        <li>Read <b>Control Charts</b> in context.<ul><li>X-bar groups open-dock percentages into hourly blocks, with flat limits from the most common subgroup size.</li><li>The p-chart uses Tuesday as baseline and Thursday for monitoring; off-peak reduces rush-hour effects.</li><li>Commuter patterns and autocorrelation can create crossings. Control limits are not service targets.</li><li>Read undefined-limit and constant-data messages.</li></ul></li></ul></section>
+      <section class="card guide-step docs-record"><h2><span class="step-number">07</span> Record a decision</h2><ul>
+        <li>Save the dataset, snapshot, filters, station, observed issue and proposed move or repair.</li>
+        <li>Compare the same view in another scenario before recommending a network change.</li>
+        <li>For your own data, use API <code>POST /compute/...</code> endpoints.<ul><li>The dashboard has no CSV upload.</li><li>API <code>/docs</code> is the separate interactive endpoint reference.</li></ul></li></ul>
+        <p class="muted">Repository references: <code>docs/TOOL_GUIDE.md</code> for functions and parameters, <code>app/README.md</code> for endpoints, and <code>data/README.md</code> for the codebook.</p></section>
+    </div>${docsFormulaCards()}</article>`;
+  // Bind the same heatmap control and map renderer used by the Map page.
+  if (S.data && !S.loading && !S.error) {
+    $("#heat-metric").onchange = e => { S.heatMetric = e.target.value; render(); };
+    if (typeof window !== "undefined") drawLeaflet(snapData().stations, new Set(S.data.stations.map(s => s.station_id)));
+  }
+}
+
+// Portraits and biographies were supplied by the team; filenames are local assets.
+function pageAbout(el) {
+  const team = [
+    ['Zoe Bishop', 'zoe-bishop', 'Graduated cum laude with a Bachelor of Science in Mechanical Engineering from Cornell University and currently pursuing a Master of Engineering in Mechanical Engineering at Cornell University. Passionate about applying mechanical and quality engineering principles to real-world engineering challenges.'],
+    ['Allison Lou', 'allison-lou', 'M.Eng and BS in Mechanical Engineering, both from Cornell University.'],
+    ['Liliana Nasrallah', 'liliana-nasrallah', 'Mechanical Engineering M.Eng. & B.S. at Cornell University'],
+    ['Joanna Tan', 'joanna-tan', 'Mechanical Engineering M.Eng. & B.S. at Cornell University. Interests lie at the intersection of human-centered applications, where engineering can create meaningful real-world impact.'],
+  ];
+  el.innerHTML = `<article class="guide about-guide"><header class="guide-intro"><span class="guide-eyebrow">THE PEOPLE BEHIND DOCK WATCH</span><h2>Meet The Team!</h2><p>Members of Cornell University’s Systems Engineering and Six Sigma for the Design and Operation of Reliable Systems Course.</p></header>
+    <div class="team-grid">${team.map(([name, image, bio]) => `<section class="card team-card"><img src="images/${image}.jpg" alt="${esc(name)} headshot" width="400" height="400"><div class="team-bio"><span class="guide-eyebrow">CORNELL UNIVERSITY</span><h2>${esc(name)}</h2><p>${esc(bio)}</p></div></section>`).join('')}</div>
+    <footer class="card about-footer"><h2>Engineering better journeys</h2><p>Dock Watch brings bikeshare availability, dispatch planning and quality-control analysis together in one dashboard. Built for the Cornell Six Sigma Hackathon using synthetic demonstration data.</p><a href="#docs">Explore the analyst guide →</a></footer></article>`;
+}
+
+// Reuse the operational heatmap renderer, Leaflet map and dock-state styling.
+// These previews are driven by the same data as their full dashboard pages.
+function docsOperationalPreviews() {
+  if (!S.data || S.loading || S.error) return '';
+  const snap = snapData();
+  const dockRows = snap.stations.slice(0, 3);
+  return `<section class="docs-gallery" aria-label="Dashboard previews">
+    <div class="guide-section-title"><span class="guide-eyebrow">RECOGNIZE THE VIEW</span><h2>A closer look at the dashboard</h2><p>These are the dashboard's own map, heatmap and dock-state components, using your selected synthetic dataset.</p></div>
+    <div class="docs-preview-grid">
+      <section class="card guide-figure"><h2>Map · locate the problem</h2><p>Station shapes and colors match the full Map. Select a marker to inspect that station there.</p><div id="leaflet" class="docs-map" aria-label="Station map preview"></div><p class="small muted">Street tiles require an internet connection. <a href="#map">Open the full Map →</a></p></section>
+      <section class="card guide-figure"><h2>Maintenance · read the dock tracker</h2><p>Each square is a dock. Blue means a rentable bike; white means open. Fault symbols identify unusable docks.</p>
+        <div class="legend">${Object.entries(DOCK_STATES).map(([k, [label, symbol]]) => `<span class="item"><span class="dock ${k}" aria-hidden="true">${symbol}</span>${label}</span>`).join('')}</div>
+        <div class="docs-dock-rows">${dockRows.map(r => `<div><b>${esc(stName(r.id))}</b><div class="docks">${snap.docks[r.id].grid.map((state, i) => `<span class="dock ${state}" title="Dock ${i + 1}: ${DOCK_STATES[state][0]}" aria-label="Dock ${i + 1}: ${DOCK_STATES[state][0]}">${DOCK_STATES[state][1]}</span>`).join('')}</div><small class="muted">${r.docks_disabled} broken docks · ${r.eff} effective capacity</small></div>`).join('')}</div>
+        <p class="small muted">Dock order is schematic, as on Maintenance. <a href="#maintenance">Open Maintenance →</a></p></section>
+      <section class="docs-heat-preview">${heatmapCard(S.data.stations.map(s => s.station_id))}</section>
+    </div></section>`;
+}
+
+// Display formulas already implemented in qc.py, without recomputing results.
+function docsFormulaCards() {
+  return `<section class="docs-formulas" aria-label="Formulas used by Dock Watch"><div class="guide-section-title"><span class="guide-eyebrow">BEHIND THE NUMBERS</span><h2>Key formulas, explained</h2><p>Use these definitions to connect the dashboard's numbers to an operational decision.</p></div><div class="formula-grid">
+    <section class="card formula-card"><h3>Usable capacity & fill</h3><div class="formula-equation"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>C</mi><mo>=</mo><msub><mi>D</mi><mi>total</mi></msub><mo>−</mo><msub><mi>D</mi><mi>disabled</mi></msub></mrow></math></div><div class="formula-equation"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>F</mi><mo>=</mo><mn>100</mn><mo>×</mo><mfrac><mrow><mi>B</mi></mrow><mrow><mi>C</mi></mrow></mfrac></mrow></math></div><p>C is effective capacity; D<sub>total</sub> is installed docks, D<sub>disabled</sub> is broken docks, B is docked bikes and F is fill as a percentage. Docked bikes include broken bikes occupying working docks. If C is zero, fill is undefined.</p><p class="formula-example">Example: 12 docks − 4 broken = 8 usable; 6 docked bikes means 75% fill.</p></section>
+    <section class="card formula-card"><h3>Historical risk</h3><div class="formula-equation"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>R</mi><mo>=</mo><mn>100</mn><mo>×</mo><mfrac><mrow><msub><mi>N</mi><mi>unusable</mi></msub></mrow><mrow><msub><mi>N</mi><mi>comparable</mi></msub></mrow></mfrac></mrow></math></div><p>R is risk as a percentage; N<sub>unusable</sub> and N<sub>comparable</sub> are counts of past unusable and comparable polls. Comparable polls come from the same weekday and time window in earlier weeks. Unusable means empty, full or out of service. Currently unusable stations receive 100%; no history means no estimate.</p></section>
+    <section class="card formula-card"><h3>Forecast bikes</h3><div class="formula-equation"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mover accent="true"><mi>B</mi><mo>^</mo></mover><mo>(</mo><mi>t</mi><mo>+</mo><mi>h</mi><mo>)</mo><mo>=</mo><mi>B</mi><mo>(</mo><mi>t</mi><mo>)</mo><mo>+</mo><mi>C</mi><mo>[</mo><mover accent="true"><mi>f</mi><mo>¯</mo></mover><mo>(</mo><mi>t</mi><mo>+</mo><mi>h</mi><mo>)</mo><mo>−</mo><mover accent="true"><mi>f</mi><mo>¯</mo></mover><mo>(</mo><mi>t</mi><mo>)</mo><mo>]</mo></mrow></math></div><p>B(t) is bikes now; f̄ is historical mean fill as a fraction. h is 30, 60, 90 or 120 minutes. Projections are kept between zero and C.</p><p class="formula-example">A warning starts within 10% of capacity, or at least one bike, of empty or full.</p></section>
+    <section class="card formula-card"><h3>Failure priority · FMEA</h3><div class="formula-equation"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>RPN</mi><mo>=</mo><mi>S</mi><mo>×</mo><mi>O</mi><mo>×</mo><mi>D</mi></mrow></math></div><p>S, O and D denote severity, occurrence and detection. Each score runs from 1 to 10. Higher detection means harder to detect. Rank modes by RPN to focus investigation; these are priority scores, not probabilities.</p><p class="formula-example">Example: 8 × 5 × 3 = 120.</p></section>
+    <section class="card formula-card"><h3>X-bar control limits</h3><div class="formula-equation"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>UCL</mi><mo>=</mo><mover accent="true"><mover accent="true"><mi>X</mi><mo>¯</mo></mover><mo>¯</mo></mover><mo>+</mo><mn>3</mn><mi>SE</mi><mo>=</mo><mover accent="true"><mover accent="true"><mi>X</mi><mo>¯</mo></mover><mo>¯</mo></mover><mo>+</mo><mn>3</mn><mfrac><mrow><msub><mi>σ</mi><mi>short</mi></msub></mrow><mrow><msqrt><msub><mi>n</mi><mi>w</mi></msub></msqrt></mrow></mfrac></mrow></math><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>LCL</mi><mo>=</mo><mover accent="true"><mover accent="true"><mi>X</mi><mo>¯</mo></mover><mo>¯</mo></mover><mo>−</mo><mn>3</mn><mi>SE</mi><mo>=</mo><mover accent="true"><mover accent="true"><mi>X</mi><mo>¯</mo></mover><mo>¯</mo></mover><mo>−</mo><mn>3</mn><mfrac><mrow><msub><mi>σ</mi><mi>short</mi></msub></mrow><mrow><msqrt><msub><mi>n</mi><mi>w</mi></msub></msqrt></mrow></mfrac></mrow></math></div><p>UCL and LCL are the upper and lower control limits; SE is the standard error. X-double-bar is the average of hourly subgroup means; σ<sub>short</sub> is the square root of the average within-subgroup sample variance. n<sub>w</sub> is the most common subgroup size for the dashboard's flat limits. Zero spread leaves limits undefined.</p></section>
+    <section class="card formula-card"><h3>Proportion control limits</h3><div class="formula-equation"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>UCL</mi><mo>=</mo><mi>min</mi><mo>(</mo><mn>1</mn><mo>,</mo><mover accent="true"><mi>p</mi><mo>¯</mo></mover><mo>+</mo><mn>3</mn><msqrt><mfrac><mrow><mover accent="true"><mi>p</mi><mo>¯</mo></mover><mo>(</mo><mn>1</mn><mo>−</mo><mover accent="true"><mi>p</mi><mo>¯</mo></mover><mo>)</mo></mrow><mrow><msub><mi>n</mi><mi>w</mi></msub></mrow></mfrac></msqrt><mo>)</mo></mrow></math><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>LCL</mi><mo>=</mo><mi>max</mi><mo>(</mo><mn>0</mn><mo>,</mo><mover accent="true"><mi>p</mi><mo>¯</mo></mover><mo>−</mo><mn>3</mn><msqrt><mfrac><mrow><mover accent="true"><mi>p</mi><mo>¯</mo></mover><mo>(</mo><mn>1</mn><mo>−</mo><mover accent="true"><mi>p</mi><mo>¯</mo></mover><mo>)</mo></mrow><mrow><msub><mi>n</mi><mi>w</mi></msub></mrow></mfrac></msqrt><mo>)</mo></mrow></math></div><p>p̄ is total unusable stations divided by total station observations in the Tuesday baseline. n<sub>w</sub> is the most common station count per poll. Limits are bounded by 0 and 1. A collapsed limit is reported when p̄ is zero or one.</p></section>
+  </div><p class="howto">Control limits describe process behavior, not acceptable service targets. Daily demand patterns and autocorrelated polls affect interpretation. Exact functions, assumptions and known-answer tests are documented in the repository.</p></section>`;
+}

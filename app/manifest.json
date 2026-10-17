@@ -20,25 +20,25 @@
   },
   "files": {
     "requirements.txt": {
-      "checksum": "aa5da1c3587376d93273c05178e6828f"
+      "checksum": "d42b56d54986e9b86be0a086a8c10269"
     },
     ".python-version": {
-      "checksum": "61939823fbcc7e8de3b61ab105331baf"
+      "checksum": "c3052f53ccf07991da5591cab5ee1274"
     },
     "README.md": {
-      "checksum": "16627bafcbab57902d50fd7d1d006a4b"
+      "checksum": "4876364216a5cdce2ab0c21ebfb341ae"
     },
     "app.py": {
-      "checksum": "199f3d5bb3011c7b85334ae99384b7d1"
+      "checksum": "2bee7b83f7f44c5468077cb00617b3f2"
     },
     "qc.py": {
-      "checksum": "50f83c7630c7cf9c4478cacae70870af"
+      "checksum": "7d832202690bf49bd65ac07d8152bf19"
     },
     "site/app.js": {
-      "checksum": "3366ffffd161b8e65e8acfd42f794324"
+      "checksum": "aba958d43a2b587ec52c99c3cdfa62d2"
     },
     "site/calc.js": {
-      "checksum": "0dbc225e31222b85d42b7b679782205b"
+      "checksum": "ea424edb29d2a4f7e21dee336dca7257"
     },
     "site/data/high_failure_week__seed_1.json": {
       "checksum": "7de9c1fbf8dbdd52f15dd4badc10a568"
@@ -56,13 +56,25 @@
       "checksum": "126ae1d3d741440de4809b0e1d5988e4"
     },
     "site/index.html": {
-      "checksum": "576393ac1bfd1ebc6431e1cac3dd65e9"
+      "checksum": "beeb0e3ea74a1360293c47ec28bb0238"
     },
     "site/package.json": {
       "checksum": "07613765e9341a0662911bdef9f5bb2b"
     },
     "site/styles.css": {
-      "checksum": "9c8bd300c1df05d2b044774c8495933c"
+      "checksum": "ac046d48c01080ed4d1889cd7d3d25a9"
+    },
+    "site/images/zoe-bishop.jpg": {
+      "checksum": "970a5366bd227547dde990f2efdbfcb7"
+    },
+    "site/images/allison-lou.jpg": {
+      "checksum": "86e8e6ce3d3dd987896736585cf804f2"
+    },
+    "site/images/liliana-nasrallah.jpg": {
+      "checksum": "9cc7a38ce7ad88314e9ded5f23e00073"
+    },
+    "site/images/joanna-tan.jpg": {
+      "checksum": "9316dd488efdc49c1ac05e95c7869781"
     }
   }
 }

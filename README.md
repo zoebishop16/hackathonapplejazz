@@ -68,7 +68,7 @@ curl -X POST http://localhost:8000/compute/fill -H "content-type: application/js
 returns effective capacity 8, fill 75% ("high"), naive fill 50%, and the flag
 `looks_emptier`: the 4 broken docks hide how full it really is.
 
-## The five pages
+## The seven pages
 
 The site opens on the **Network Overview**; click **Dock Watch** at the top
 left from any page to return to it.
@@ -178,3 +178,106 @@ The hackathon's own pages (schedule, rubric, prompts) are in [`docs/`](docs/READ
 Built with Claude Code from the team's design document. Course methods from
 the SYSEN 5300 textbook, https://timothyfraser.com/sigma/. GBFS field names
 follow https://gbfs.org/. The API uses FastAPI, uvicorn and pydantic; the statistics use only the Python standard library. The Connect workflow is adapted from timothyfraser/fastapi-connect-demo (MIT).
+
+## Analyst and developer documentation
+
+The top navigation ends with **Docs** (analyst workflow, actual dashboard previews and formula cards) and **About** (Zoe Bishop, Allison Lou, Liliana Nasrallah and Joanna Tan, with supplied headshots and biographies). Click **Dock Watch** to return to Overview.
+
+See the [tool guide](docs/TOOL_GUIDE.md) for setup, inputs, function signatures, parameter defaults, outputs and interpretation limits. Dashboard `#docs` is separate from API `/docs`. Hosting paths are unchanged.
+
+## Documentation map
+
+This README is the project manual: purpose, setup, operation, statistical interpretation, architecture, validation and release process. It is intended to support a fresh clone and an independent review, beyond the website's concise analyst instructions.
+
+| Document | Audience and scope |
+| --- | --- |
+| [Comprehensive dataset codebook](data/CODEBOOK.md) | Analysts and data engineers: every file/variable, exact file inventories, keys, units, categories, joins, missingness, derivations and proposed real-data collection protocol |
+| [Data overview](data/README.md) | Short introduction to the synthetic scenarios and their commuter patterns |
+| [Function reference](docs/TOOL_GUIDE.md) | Developers: signatures, parameters, outputs and browser lifecycle |
+| [API reference](app/README.md) | API consumers: dataset IDs, snapshot keys, filters and example request bodies; live `/docs` supplies machine-derived schemas |
+| [Demonstration](demo/README.md) | Reviewers: expected behavior and example results for all four datasets |
+| [Specification](SPEC.md) | Team: agreed scope, methods, assumptions and known answers |
+| [Task ledger](CONTRACT.yaml) | Team: ownership, verification commands and completion records |
+
+## Windows setup and static preview
+
+Use an installed Python 3.11 or later for local development; the Connect bundle separately targets Python 3.12.4. Python 3.13 has also passed the repository tests in this workspace. Node.js is needed for JavaScript verification, not for serving the buildless dashboard.
+
+From PowerShell in the repository root:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r tests/requirements.txt
+.\.venv\Scripts\python.exe app/testme.py
+```
+
+Open `http://localhost:8000/dashboard/` for the complete app. Use the same Python executable to run tests so dependencies are resolved from the same environment. If Windows redirects `python` to a Store alias, use the full path to the installed interpreter. You do not need to activate the virtual environment when using these explicit paths.
+
+For a dashboard-only preview using the already committed JSON:
+
+```powershell
+python -m http.server 8001 --bind 127.0.0.1 --directory app/site
+```
+
+Open `http://localhost:8001/`, `http://localhost:8001/#docs` or `http://localhost:8001/#about`. This server does not expose the API. Opening `index.html` directly from disk does not reliably support JSON fetching. Stop either server with Ctrl+C. Do not run both on the same port.
+
+## An analyst session from start to finish
+
+1. Select a dataset and replay snapshot. Compare like times: a normal morning rush and a high-failure morning rush answer a different question from morning versus midday. The snapshot freshness indicator uses the replay clock, not today's date.
+2. Open Overview and note service failures before interpreting forecasts. Empty means no rentable bikes; full means no open docks. Inspect out-of-service stations and stale reports even when the visible inventory looks balanced.
+3. Follow an at-risk station to the Map. Confirm its district, bikes, available docks, effective capacity and report age. Use filters to narrow the operational area. The heatmap pools three weeks of history and helps identify recurring weekday/hour patterns; it does not show only the selected snapshot.
+4. In Dispatch, inspect the ranked forecast and compare proposed pickup/dropoff actions with vehicle capacity and availability. The order is urgency, expected impact, then historical risk; it is not a route optimization solution. An apparently severe warning can still fail to occur because the model uses historical averages.
+5. In Maintenance, distinguish a bike shortage from a broken-dock problem. The dock squares reproduce diagnostic states schematically. A station with recurring unplanned repairs may warrant a root-cause investigation rather than repeated dispatch alone.
+6. In Data Analysis, review FMEA judgments and control-chart assumptions. Keep a note of edited S/O/D scores and why they changed. A high RPN prioritizes investigation but is not a calibrated probability or monetary loss estimate.
+7. Record dataset ID, snapshot, filters, affected stations, observed evidence and proposed action. Browser assignments are a demonstration and do not create an external work order. Share the written decision with colleagues; local browser state is not a shared fleet system.
+
+The Docs page contains the actual map, heatmap and dock-state components alongside concise guidance and formulas. Changing dataset or snapshot updates the examples. External map tiles require internet access; the text, dock tracker, forecast and heatmap remain useful without a basemap.
+
+## Statistical interpretation and reproducibility
+
+The functions in `app/qc.py` are the source of truth. The API calls them directly for custom computations; `app/build.py` calls them while preparing the bundled JSON. UI preview components reuse the generated results. No change to a displayed score, filter or local assignment rewrites the source CSVs.
+
+Fill is occupancy of working docks, including disabled bikes occupying working docks. Rental availability uses rentable bikes only. A station can therefore have nonzero occupancy while being empty from a rider's perspective. Network open-dock percentage uses all installed docks as its denominator, which differs from effective-capacity fill. See the codebook's derived-variable table before comparing percentages from different pages.
+
+X-bar observations are open-dock percentages at station-polls, grouped into hours that close on the hour. The center line is the mean of subgroup means. The estimated short-term spread is the square root of the mean sample variance within groups. Flat limits use the most common subgroup size, with the smaller size breaking a tie. Unequal group sizes and serial dependence affect interpretation; the limits do not remove time-of-day demand. Constant groups produce a message instead of invented nonzero limits.
+
+The p-chart treats each station-poll as an opportunity for unusable service. Tuesday provides the baseline proportion; Thursday is monitoring. Off-peak comparisons reduce the regular rush-hour signal. A boundary baseline proportion of zero or one collapses limits and requires interpretation of the returned message. The normal approximation and independence assumptions should be checked before applying this approach to an operator's feed.
+
+Historical risk uses only comparable earlier weeks. The forecast adds historical average change to current bikes and clamps the result to physical capacity. Neither is a trained predictive model with an evaluated confidence interval. The synthetic generator models stations independently and allows a depot float; it does not conserve the exact citywide bicycle total. These demonstrations establish reproducible behavior, not estimates of Boston's actual operations.
+
+Reliability and availability are exposed through the API. Series and parallel models assume independent components. MTBF and MTTR must share time units when used for availability. Completed-repair averages omit open tickets; report backlog as well to avoid describing only resolved work.
+
+## Adapting the tool to an operator's data
+
+Read [the collection protocol and schema](data/CODEBOOK.md) before importing real exports. Maintain a separate raw archive, record timezone and source report time, normalize operator status categories, retain inventory changes, and reconcile whether disabled bike/dock categories overlap. Keep missing polls distinct from genuine empty stations. The current builder expects complete typed CSV columns and does not provide an interactive upload/cleaning workflow.
+
+Preserve stable station and vehicle IDs and validate every foreign-key reference. Real unresolved tickets need an explicit ingestion rule; blank timestamps are not accepted by the current CSV parser. Add source-specific checks rather than assuming the synthetic-data validation covers all production cases. Do not use the two simulation seeds as independent real-world evidence. Collect enough representative history to evaluate forecast errors and chart assumptions before operational reliance.
+
+## Verification and troubleshooting
+
+Run from the repository root after installing test dependencies:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests -q
+node tests/test_calc_js.mjs
+node app/check_h09.mjs
+.\.venv\Scripts\python.exe scripts/validate_data.py
+```
+
+The Python suite checks known-answer/degenerate statistics and API responses. The calculator checks compare the browser formulas to expected results. The guide checks exercise navigation, data-independent help and all 16 bundled snapshot combinations. They do not replace visual browser review of layout, Leaflet tiles or image crops. The data validator checks the committed simulation's design rules.
+
+| Symptom | What to check |
+| --- | --- |
+| Public site still has the old layout | Local changes require a commit, push and successful hosting workflow; refresh with Ctrl+Shift+R after deployment |
+| No station data | Serve over HTTP; confirm `app/site/data/index.json` exists; run `python app/build.py` if rebuilding is needed |
+| API reports 404 for a dataset/snapshot | Use `GET /datasets` for the accepted IDs and snapshot keys |
+| API reports 422 | Read the validation message in the response; use counts, proportions and time units defined in `/docs` |
+| Map blank but other views work | Check Leaflet CDN and street-tile access; a map warning distinguishes network failures from dataset failures |
+| Assignments differ on a colleague's computer | Assignment state is stored locally in each browser; it is not synchronized |
+| Test command cannot import a dependency | Install `tests/requirements.txt` with the same Python interpreter used for pytest |
+
+## Release checklist and team
+
+Review the diff, run the checks, update generated JSON if input/build behavior changed, and refresh Connect manifest checksums when bundled application files change. Stage explicit paths. Commit/push after team approval, then inspect the existing GitHub Actions workflows. GitHub Pages serves the static dashboard and Connect serves the API and dashboard; deploying one should not be mistaken for verification of the other. Existing public paths remain unchanged. Keep credentials in environment/repository secrets.
+
+The team is **Zoe Bishop, Allison Lou, Liliana Nasrallah and Joanna Tan**, members of Cornell University's Systems Engineering and Six Sigma for the Design and Operation of Reliable Systems Course. Their supplied biographies and portraits appear on About. This repository contains synthetic operational data and team-provided portraits; it contains no real rider records. Preserve source/library attribution when adapting the project.

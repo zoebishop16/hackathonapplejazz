@@ -8,6 +8,8 @@ rpn(), series(), parallel() and availability() below (tests/test_calc_js.mjs
 checks they agree).
 """
 
+# Units: percentage outputs use 0-100; reliability and historical fill use 0-1.
+# Callers validate physical counts and remove missing observations before analysis.
 import math
 
 # ---------------------------------------------------------------- fill level

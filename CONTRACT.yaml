@@ -155,3 +155,73 @@ tasks:
       testme script and the H-03 tests both pass with no extra steps; git
       grep -i "api_key" finds no real key; the Devpost entry links the repo.
     result: "Public repo github.com/zoebishop16/hackathonapplejazz; Devpost entry still to submit."
+
+  - id: H-09
+    title: Top navigation, analyst guide, About page and source documentation
+    status: done
+    owner: "Codex for Apple Jazz"
+    started_at: "2026-10-17"
+    owns: ["app/", "docs/TOOL_GUIDE.md", "README.md", "SPEC.md"]
+    notes: "Scope authorized by the user's explicit request on 2026-10-17."
+    definition_of_done: "node app/check_h09.mjs prints H-09 static checks PASS; pytest tests -q and node tests/test_calc_js.mjs pass."
+    result: "Top navigation, Docs/About and tool reference implemented; 41 pytest, 12 calculator checks and H-09 static checks PASS. Browser visual review pending; uncommitted and not deployed."
+
+  - id: H-10
+    title: Illustrated analyst Docs and team headshot cards
+    status: done
+    owner: "Codex for Apple Jazz"
+    started_at: "2026-10-17"
+    owns: ["app/", "SPEC.md", "docs/TOOL_GUIDE.md"]
+    notes: "Authorized by the user's supplied layout request, headshots and biographies."
+    definition_of_done: "node app/check_h09.mjs prints H-09 static checks PASS; local preview serves all four headshots with HTTP 200."
+    result: "Full-width illustrated Docs and four supplied team portraits/bios; H-09 static checks PASS across all 16 snapshots; preview and all four images HTTP 200. Not deployed; visual browser review pending."
+
+  - id: H-11
+    title: Final guide visuals, formulas and comprehensive project documentation
+    status: done
+    owner: "Codex for Apple Jazz"
+    started_at: "2026-10-17"
+    owns: ["app/", "README.md", "data/", "SPEC.md"]
+    notes: "Authorized by the user's final edits request."
+    definition_of_done: "node app/check_h09.mjs prints H-09 static checks PASS; python scripts/validate_data.py passes; codebook documents every CSV header."
+    result: "Actual map/heatmap/dock previews, six formula cards, desktop About line and expanded README/CODEBOOK; guide checks PASS, 74 data checks pass, all CSV headers documented. Uncommitted and not deployed; visual browser review pending."
+
+  - id: H-12
+    title: Algebraic equation typesetting and compact team layout
+    status: done
+    owner: "Codex for Apple Jazz"
+    started_at: "2026-10-17"
+    owns: ["app/"]
+    notes: "Authorized by the user's equation example and About spacing request."
+    definition_of_done: "node app/check_h09.mjs prints H-09 static checks PASS; equation markup has fractions and separate UCL/LCL."
+    result: "Nine native MathML expressions with algebraic symbols, fractions and separate UCL/LCL; smaller portraits and tighter About spacing. Guide checks and equation markup PASS; visual review pending; not deployed."
+
+  - id: H-13
+    title: Balance portrait height and About spacing
+    status: done
+    owner: "Codex for Apple Jazz"
+    started_at: "2026-10-17"
+    owns: ["app/"]
+    notes: "Authorized by the user's portrait cropping correction."
+    definition_of_done: "node app/check_h09.mjs prints H-09 static checks PASS."
+    result: "Portrait height increased to 35vh (260-350px), About spacing eased and square images restored on mobile; H-09 static checks PASS. Not deployed; visual review pending."
+
+  - id: H-14
+    title: Raise About content while preserving portrait size
+    status: done
+    owner: "Codex for Apple Jazz"
+    started_at: "2026-10-17"
+    owns: ["app/"]
+    notes: "Authorized by the user's final About spacing request."
+    definition_of_done: "node app/check_h09.mjs prints H-09 static checks PASS."
+    result: "Reduced About top and introduction spacing by approximately 50px without resizing portraits; H-09 static checks PASS. Not deployed; visual review pending."
+
+  - id: H-15
+    title: Clarify morning and midday intervals in the codebook
+    status: done
+    owner: "Codex for Apple Jazz"
+    started_at: "2026-10-17"
+    owns: ["data/CODEBOOK.md"]
+    notes: "Authorized by the user's time-gap clarification request."
+    definition_of_done: "Codebook table contains Morning 5-7 AM and Midday 9 AM-4 PM; all existing other rows remain unchanged."
+    result: "Morning 5-7 AM added from generator targets; Midday labeled 9 AM-4 PM. Exact comparison confirms all other codebook content unchanged."

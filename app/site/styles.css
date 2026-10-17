@@ -62,27 +62,21 @@ button.primary:hover { background: var(--highlight-strong); border-color: var(--
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 
 /* ---------------------------------------------------------------- shell */
-.shell { display: flex; height: 100vh; }
-.sidebar {
-  width: 232px; flex: none; background: var(--panel); border-right: 1px solid var(--line);
-  display: flex; flex-direction: column; transition: width .15s ease;
-}
-.brand { display: flex; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid var(--line); height: 56px; }
+/* Full-width workspace: navigation wraps above content rather than taking a column. */
+.shell { display: flex; flex-direction: column; height: 100dvh; }
+.site-header { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 24px; padding: 8px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; min-height: 36px; }
 .brand-name { font-weight: 700; letter-spacing: .01em; white-space: nowrap; }
-.icon-btn { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border-color: transparent; }
-nav { padding: 8px; flex: 1; overflow-y: auto; }
-nav a {
-  display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px;
-  color: var(--text); text-decoration: none; white-space: nowrap;
-}
+nav { display: flex; flex-wrap: wrap; gap: 4px; }
+nav a { display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: 6px; color: var(--text); text-decoration: none; white-space: nowrap; }
 nav a:hover { background: var(--highlight); }
-nav a[aria-current=page], nav a[aria-current=page]:hover { background: var(--highlight-strong); font-weight: 600; }
+nav a[aria-current=page] { background: var(--highlight-strong); font-weight: 600; }
 nav a svg { flex: none; }
-.shell.collapsed .sidebar { width: 56px; }
-.shell.collapsed nav a span { display: none; }
-.shell.collapsed nav a { justify-content: center; padding: 8px 0; }
-
-.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.guide { max-width: 960px; line-height: 1.7; }
+.guide h2 { margin: 20px 0 8px; font-size: 18px; }
+.guide h2:first-child { margin-top: 0; }
+.guide p { margin-bottom: 12px; }
+.main { min-height: 0; flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .topbar {
   height: 56px; flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 0 20px; background: var(--panel); border-bottom: 1px solid var(--line);
@@ -228,9 +222,6 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 a.brand-name { color: var(--text); text-decoration: none; border-radius: 4px; }
 a.brand-name:hover { text-decoration: underline; }
 .brand-short { display: none; font-size: 13px; font-weight: 800; letter-spacing: .02em; }
-.shell.collapsed .brand { flex-direction: column; height: auto; padding: 8px 0; gap: 4px; }
-.shell.collapsed .brand-full { display: none; }
-.shell.collapsed .brand-short { display: inline; }
 .topbar { height: auto; min-height: 56px; flex-wrap: wrap; row-gap: 6px; padding-top: 8px; padding-bottom: 8px; }
 .title-block { flex: 1 1 300px; min-width: 0; }
 .page-sub { margin: 0; font-size: 12px; color: var(--muted); }
@@ -281,12 +272,86 @@ tr.clickable:focus-visible { outline: 2px solid var(--high); outline-offset: -2p
   .top-controls { flex-wrap: wrap; }
   main { padding: 12px 16px 24px; }
   .cols-2, .cols-4, .map-layout, .with-filters { grid-template-columns: 1fr; }
-  .sidebar { width: 56px; }
-  nav a span { display: none; }
-  .sidebar .brand { flex-direction: column; height: auto; padding: 8px 0; gap: 4px; }
-  .sidebar .brand-full { display: none; }
-  .sidebar .brand-short { display: inline; }
-  nav a { justify-content: center; padding: 8px 0; }
+  .site-header { padding: 8px 16px; }
   .card-h { flex-wrap: wrap; }
-  .table-wrap { max-width: calc(100vw - 56px - 32px); }
+  .table-wrap { max-width: calc(100vw - 32px); }
+}
+
+/* Guides use the workspace width, with inset copy and responsive visual panels. */
+.guide { width: 100%; max-width: none; padding: clamp(16px, 2.5vw, 42px); }
+.guide-intro { margin-bottom: 28px; padding: 12px 0 8px; }
+.guide-intro h2 { font-size: clamp(26px, 3vw, 40px); letter-spacing: -.025em; margin: 8px 0 12px; line-height: 1.2; }
+.guide-intro p { font-size: 16px; max-width: 85ch; }
+.guide-eyebrow { color: var(--high); font-size: 11px; font-weight: 700; letter-spacing: .12em; }
+.docs-visuals, .docs-steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-bottom: 26px; }
+.guide-figure { margin: 0; padding: 24px; min-width: 0; }
+.guide-figure figcaption { margin-bottom: 20px; }
+.guide-figure figcaption b { display: block; font-size: 18px; }
+.guide-figure figcaption span { color: var(--muted); font-size: 12px; }
+.guide-figure > p { margin-top: 18px; font-size: 13px; }
+.docs-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.docs-kpis .kpi { border: 1px solid var(--box-blue-line); border-radius: var(--radius); }
+.docs-station-sample { display: grid; gap: 12px; margin-top: 20px; }
+.docs-station-sample > div { display: flex; align-items: center; gap: 12px; }
+.docs-station-sample small { display: block; color: var(--muted); }
+.docs-forecast, .docs-record { grid-column: 1 / -1; }
+.guide-step { padding: 26px 30px; min-width: 0; }
+.guide-step h2 { display: flex; align-items: center; gap: 12px; margin-top: 0; }
+.step-number { background: var(--box-blue); color: var(--high); border-radius: 8px; padding: 5px 9px; font-size: 13px; }
+.guide ul { padding-left: 24px; margin: 14px 0 0; }
+.guide li { padding-left: 4px; margin-bottom: 9px; }
+.guide ul ul { margin: 8px 0 14px; color: var(--muted); list-style-type: circle; }
+.guide-notice { background: var(--box-blue); padding: 20px; border-radius: 8px; margin-bottom: 24px; }
+.team-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; align-items: stretch; }
+.team-card { overflow: hidden; min-width: 0; }
+.team-card img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; object-position: center 30%; }
+.team-bio { padding: 24px; }
+.team-bio h2 { font-size: 22px; margin: 8px 0 14px; text-transform: none; }
+.team-bio p { color: var(--muted); line-height: 1.75; }
+.about-footer { margin-top: 26px; padding: 28px; background: var(--box-blue); border-color: var(--box-blue-line); }
+.about-footer h2 { margin-top: 0; }
+@media (max-width: 1150px) {
+  .team-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .docs-visuals, .docs-steps, .team-grid { grid-template-columns: minmax(0, 1fr); }
+  .guide-step, .guide-figure { padding: 22px; }
+  .guide .table-wrap { max-width: 100%; }
+}
+
+/* Match the actual dashboard components inside the illustrated guide. */
+.guide-section-title { margin: 28px 0 20px; }
+.docs-preview-grid, .formula-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.docs-map { height: 340px; border: 1px solid var(--line); border-radius: 8px; z-index: 0; }
+.docs-heat-preview { grid-column: 1 / -1; min-width: 0; }
+.docs-heat-preview .card-h { flex-wrap: wrap; gap: 12px; }
+.docs-dock-rows { display: grid; gap: 18px; margin-top: 24px; }
+.docs-dock-rows .docks { margin: 8px 0; }
+.formula-card { padding: 26px 30px; min-width: 0; }
+.formula-card h3 { color: var(--high); margin-bottom: 18px; }
+.formula-equation { font-family: Cambria, Georgia, serif; font-size: 21px; padding: 16px; margin-bottom: 14px; background: var(--box-blue); border-left: 3px solid var(--high); border-radius: 4px; overflow-wrap: anywhere; }
+.formula-example { color: var(--muted); font-size: 13px; }
+.about-guide .guide-intro p { max-width: none; }
+@media (min-width: 1250px) {
+  .about-guide .guide-intro p { white-space: nowrap; font-size: clamp(13px, 1.1vw, 16px); }
+}
+@media (max-width: 760px) {
+  .docs-preview-grid, .formula-grid { grid-template-columns: minmax(0, 1fr); }
+  .formula-card { padding: 22px; }
+  .docs-map { height: 280px; }
+}
+
+/* Native mathematical notation: scalable fractions, radicals and accents. */
+.formula-equation { overflow-x: auto; overflow-wrap: normal; }
+.formula-equation math { font-family: 'Cambria Math', 'STIX Two Math', math; font-size: clamp(19px, 1.6vw, 25px); text-align: left; margin: 10px 0; }
+.formula-equation math + math { margin-top: 22px; }
+/* Keep portraits and names visible sooner, without hiding any biography. */
+.about-guide { padding-top: 0; }
+.about-guide .guide-intro { margin-bottom: 8px; padding-top: 0; padding-bottom: 0; }
+.about-guide .guide-intro h2 { margin-top: 4px; margin-bottom: 6px; }
+.team-card img { height: clamp(260px, 35vh, 350px); aspect-ratio: auto; object-position: center 30%; }
+.team-bio { padding: 16px 20px 22px; }
+.team-bio h2 { margin: 5px 0 10px; }
+@media (max-width: 760px) {
+  .team-card img { height: auto; aspect-ratio: 1; }
 }

@@ -57,7 +57,7 @@ Fixed for every team:
 - A small tool that runs beats a large tool that does not.
 
 ## 6. Outputs
-- **What the user sees:** a five-page dashboard that opens on the **Network Overview** (status strip of empty, full and out-of-service stations and % of docks available; the top 5 stations at risk, including offline stations and broken docks, in the Dispatch order, with a Risk % from earlier weeks; one card per page). **Map**: a street map of Boston with every station colored and shaped by fill level, filters, a station detail panel, and the hour x weekday heatmap below. **Dispatch**: the 2-hour forecast ranked by priority (at-risk rows in red), light-blue van summary boxes, recommended moves, a manual rebalancing form, repair and rebalancing queues, and 8 vans (only available vans are offered). **Maintenance**: light-blue dock-health percentage boxes and a per-dock table with a hazard sign for misleading fill and a repeat-offender column. **Data Analysis**: FMEA with a Pareto chart, and the X-bar chart by hourly block and the p-chart, each with its formula, the count outside the limits, and what the subgroup is.
+- **What the user sees:** a seven-page dashboard with top navigation (Docs and About last) that opens on the **Network Overview** (status strip of empty, full and out-of-service stations and % of docks available; the top 5 stations at risk, including offline stations and broken docks, in the Dispatch order, with a Risk % from earlier weeks; one card per page). **Map**: a street map of Boston with every station colored and shaped by fill level, filters, a station detail panel, and the hour x weekday heatmap below. **Dispatch**: the 2-hour forecast ranked by priority (at-risk rows in red), light-blue van summary boxes, recommended moves, a manual rebalancing form, repair and rebalancing queues, and 8 vans (only available vans are offered). **Maintenance**: light-blue dock-health percentage boxes and a per-dock table with a hazard sign for misleading fill and a repeat-offender column. **Data Analysis**: FMEA with a Pareto chart, and the X-bar chart by hourly block and the p-chart, each with its formula, the count outside the limits, and what the subgroup is.
   Example: "a control chart with out-of-control points in red, plus 'stop the line: yes/no'"
 
 ## 7. Test datasets and codebook (rubric: demo 10, datasets 5, codebook 5)
@@ -76,3 +76,7 @@ collect this data for real.
 What we will NOT build, so nobody (human or agent) builds it by accident.
 - Default: logins, databases, real customer data, a second statistic before the first one is tested.
 - Logins and roles (there are none: every page is open), live GBFS feeds, route optimisation for vans (greedy nearest pairs only), forecasting beyond historical averages by time and day.
+
+The Docs page provides a full-width analyst workflow guide with nested bullets and dashboard visuals from the selected snapshot. About introduces Zoe Bishop, Allison Lou, Liliana Nasrallah and Joanna Tan with supplied headshots and biographies. docs/TOOL_GUIDE.md documents inputs, parameters and application functions.
+
+Final documentation includes formatted formula cards and previews reusing the actual map, heatmap and dock tracker components. data/CODEBOOK.md is the comprehensive off-site dataset reference; README.md is the project manual.

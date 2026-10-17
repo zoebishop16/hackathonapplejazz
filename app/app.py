@@ -56,6 +56,7 @@ async def revalidate_dashboard(request, call_next):
 
 @lru_cache(maxsize=None)
 def _index():
+    """Read and cache the generated dataset index; HTTP 503 if not built."""
     path = os.path.join(DATA_DIR, "index.json")
     if not os.path.exists(path):
         raise HTTPException(503, "No built data. Run python3 app/build.py first.")
@@ -65,6 +66,7 @@ def _index():
 
 @lru_cache(maxsize=8)
 def _dataset(dataset_id):
+    """Return cached JSON for dataset_id; reject unknown IDs with HTTP 404."""
     if dataset_id not in {d["id"] for d in _index()}:
         raise HTTPException(404, f"Unknown dataset '{dataset_id}'. See GET /datasets.")
     with open(os.path.join(DATA_DIR, f"{dataset_id}.json")) as fh:
@@ -78,6 +80,7 @@ def snapshot_key(label):
 
 
 def _snap(d, snapshot):
+    """Resolve a snapshot label or key in d; default to its first snapshot."""
     labels = d["meta"]["snapshots"]
     if snapshot is None:
         return labels[0], d["snapshots"][labels[0]]
@@ -88,14 +91,17 @@ def _snap(d, snapshot):
 
 
 def _stations(d):
+    """Index dataset d station metadata by station_id."""
     return {s["station_id"]: s for s in d["stations"]}
 
 
 def _problem(r):
+    """Return whether row r has operational problems or misleading fill."""
     return bool(r["problems"]) or bool(r["misleading"])
 
 
 def _filter(d, rows, district, status, max_feed_age, stale_only, min_open_docks, problem_only):
+    """Select rows matching district, status, freshness, open docks and problem filters."""
     info = _stations(d)
     out = []
     for r in rows:

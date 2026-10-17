@@ -19,6 +19,7 @@ import build  # noqa: E402
 
 
 def main():
+    """Build bundled datasets and their index; the launcher then starts the local API server."""
     build.main()
     try:
         import uvicorn

@@ -36,19 +36,23 @@ HORIZONS = (30, 60, 90, 120)  # forecast horizons, minutes ahead
 
 
 def t(s):
+    """Parse a synthetic timestamp string s using FMT; return a datetime."""
     return datetime.strptime(s, FMT)
 
 
 def r(x, nd=2):
+    """Round numeric x to nd decimal places (default 2); preserve None."""
     return None if x is None else round(x, nd)
 
 
 def read(path):
+    """Read path as CSV and return rows as dictionaries of strings."""
     with open(path, newline="") as fh:
         return list(csv.DictReader(fh))
 
 
 def load(folder):
+    """Load and convert the CSV files in folder for the dataset builder."""
     stations = read(os.path.join(folder, "stations.csv"))
     for s in stations:
         s["total_docks"] = int(s["total_docks"])
@@ -89,6 +93,7 @@ def fill_frac(p):
 
 
 def problems(p):
+    """Return operational problem labels for station poll p."""
     out = []
     if not p["active"]:
         out.append(p["status"])
@@ -114,6 +119,7 @@ def dist(a, b):
 
 
 def order_json(o):
+    """Convert work-order o into a JSON-serializable queue row."""
     return {"id": o["order_id"], "station": o["station_id"], "type": o["order_type"],
             "fault": o["fault"], "opened": o["opened_at"].strftime(FMT),
             "assigned": o["assigned_at"].strftime(FMT), "arrived": o["arrived_at"].strftime(FMT),
@@ -157,6 +163,7 @@ def hist_unusable(polls, now, minutes_ahead=120):
 
 
 def snapshot(now, stations, polls, faults, orders, vans):
+    """Build one replay snapshot from now and station, poll, fault, order and van records."""
     byid = {s["station_id"]: s for s in stations}
     t0 = polls[stations[0]["station_id"]][0]["time"]
     idx = int((now - t0).total_seconds() // 300)
@@ -411,6 +418,7 @@ def xbar_series(stations, polls):
 
 
 def pchart(stations, polls):
+    """Build Tuesday-baseline/Thursday-monitoring p-charts for all-day and off-peak polls."""
     n_polls = len(polls[stations[0]["station_id"]])
     per_poll = []
     for i in range(n_polls):
@@ -434,6 +442,7 @@ def pchart(stations, polls):
 
 
 def fmea(stations, polls, orders):
+    """Build failure-mode scores and Pareto results from station, poll and work-order records."""
     allp = [p for s in stations for p in polls[s["station_id"]]]
     act = [p for p in allp if p["active"]]
     called = [o for o in orders if not scheduled(o)]  # dispatch calls, not planned overnight runs
@@ -458,6 +467,7 @@ def fmea(stations, polls, orders):
 
 
 def reliability(stations, polls, orders):
+    """Build reliability summaries from station, poll and completed work-order records."""
     out = {"stations": {}}
     hours = len(polls[stations[0]["station_id"]]) * 5 / 60
     for s in stations:
@@ -495,6 +505,7 @@ def reliability(stations, polls, orders):
 
 
 def build(folder, scenario, seed):
+    """Build one folder into a JSON dataset, tagged with scenario and seed."""
     stations, polls, faults, orders, vans = load(folder)
     first = polls[stations[0]["station_id"]][0]["time"]
     last = polls[stations[0]["station_id"]][-1]["time"]
@@ -516,6 +527,7 @@ def build(folder, scenario, seed):
 
 
 def main():
+    """Build bundled datasets and their index; the launcher then starts the local API server."""
     os.makedirs(OUT, exist_ok=True)
     index = []
     for scenario in sorted(os.listdir(DATA)):
