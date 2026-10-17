@@ -87,14 +87,15 @@ never exceeds `total_docks` (checked by `scripts/validate_data.py`).
 
 ## How the control charts group this data
 
-The Data Analysis page's X-bar chart groups `status.csv` into **8-hour
-subgroups**, three per day: **00:01-08:00**, **08:01-16:00** and
-**16:01-24:00** (a poll at exactly 08:00 belongs to the first block, 16:00 to
-the second, and midnight closes the previous day's last block). Each
+The Data Analysis page's X-bar chart groups `status.csv` into **hourly
+subgroups**, 24 per day: **00:01-01:00**, **01:01-02:00**, ... **23:01-24:00**
+(a poll exactly on the hour closes the hour before it, so 08:00 belongs to
+07:01-08:00, and midnight closes the previous day's 23:01-24:00 block). Each
 observation is one station's % of open docks
 (`num_docks_available` ÷ effective capacity) at one 5-minute poll while the
-station is in service, so a full block holds 96 polls per station (2,880 for
-the whole network of 30). The limits use the most common block size for every
+station is in service, so a full block holds 12 polls per station (360 for
+the whole network of 30). An hour in which a station was out of service the
+whole time has no readings and is left off that station's chart. The limits use the most common block size for every
 point. The p-chart uses one subgroup per poll: all 30 stations.
 
 ## Files and columns

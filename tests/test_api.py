@@ -49,12 +49,13 @@ def test_station_detail_and_heatmap():
     assert len(h["percent"]) == 7 and len(h["percent"][0]) == 24
 
 
-def test_xbar_eight_hour_blocks():
-    """Recompute the first 8-hour block straight from status.csv and compare with the API."""
+def test_xbar_hourly_blocks():
+    """Recompute the first hourly block straight from status.csv and compare with the API."""
     import csv
     x = client.get(f"/datasets/{DS}/xbar", params={"scope": "district:Back Bay"}).json()
-    assert x["subgroup"] == "8-hour block" and len(x["points"]) == 21 * 3
-    assert [p["label"] for p in x["points"][:3]] == ["Mon 09-07 00:01-08:00", "Mon 09-07 08:01-16:00", "Mon 09-07 16:01-24:00"]
+    assert x["subgroup"] == "hourly block" and len(x["points"]) == 21 * 24
+    assert [p["label"] for p in x["points"][:3]] == ["Mon 09-07 00:01-01:00", "Mon 09-07 01:01-02:00", "Mon 09-07 02:01-03:00"]
+    assert x["points"][23]["label"] == "Mon 09-07 23:01-24:00"
     assert len({p["ucl"] for p in x["points"]}) == 1  # one flat pair of limits
     with open("data/normal_week/seed_1/stations.csv") as fh:
         ids = {s["station_id"] for s in csv.DictReader(fh) if s["district"] == "Back Bay"}
@@ -62,13 +63,13 @@ def test_xbar_eight_hour_blocks():
     with open("data/normal_week/seed_1/status.csv") as fh:
         for row in csv.DictReader(fh):
             t = row["timestamp"]
-            in_block = t.startswith("2026-09-07") and "00:05" <= t[11:] <= "08:00"
+            in_block = t.startswith("2026-09-07") and "00:05" <= t[11:] <= "01:00"
             if row["station_id"] in ids and in_block and row["status"] == "active":
                 eff = int(row["num_bikes_available"]) + int(row["num_bikes_disabled"]) + int(row["num_docks_available"])
                 if eff:
                     obs.append(100 * int(row["num_docks_available"]) / eff)
     first = x["points"][0]
-    assert first["n"] == len(obs) and x["n_limits"] == 96 * len(ids)
+    assert first["n"] == len(obs) and x["n_limits"] == 12 * len(ids)
     assert first["mean"] == pytest.approx(sum(obs) / len(obs), abs=0.01)
     assert client.get(f"/datasets/{DS}/xbar", params={"scope": "district:Nowhere"}).status_code == 404
 
@@ -172,7 +173,7 @@ def test_overview_matches_station_rows_and_ranking():
 
 
 def test_xbar_block_boundaries():
-    """08:00 closes the first block and 16:00 the second (blocks are x:01 to y:00)."""
+    """Each poll on the hour closes the hour before it (blocks are x:01 to x+1:00)."""
     import sys
     sys.path.insert(0, "app")
     import build
@@ -182,4 +183,5 @@ def test_xbar_block_boundaries():
              for h, m, da in [(0, 0, 0), (8, 0, 2), (8, 5, 4), (16, 0, 6), (16, 5, 8), (23, 55, 9)]]
     polls[0]["time"] = t0
     acc = build.block_open_pct(polls)
-    assert dict(acc) == {(0, 0): [20.0], (0, 1): [40.0, 60.0], (0, 2): [80.0, 90.0]}
+    # 00:00 closes a block before the data starts; 08:00 -> 07:01-08:00; 08:05 -> 08:01-09:00
+    assert dict(acc) == {(0, 7): [20.0], (0, 8): [40.0], (0, 15): [60.0], (0, 16): [80.0], (0, 23): [90.0]}

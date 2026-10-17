@@ -7,7 +7,7 @@ Pick the dataset and snapshot in the top bar. Numbers are for the
 **Wed 08:15 (morning rush)** snapshot unless a step says otherwise. Every number
 is also in the API, for example
 `GET /datasets/normal_week__seed_1/xbar?scope=network` returns the X̿ = 46.40 and
-σ_short = 23.61 from step 4.
+σ_short = 23.55 from step 4.
 
 The city is the same in every dataset: 30 stations at real Boston locations in
 6 neighborhoods (Downtown 6, Back Bay 5, Fenway 5, South Boston 5, Jamaica
@@ -41,12 +41,12 @@ begins rebalanced (see [the codebook](../data/README.md#commuter-flow-and-overni
    docks (0 of 461) and 0 stations with misleading fill at 08:15. The one
    repeat offender (threshold 3 repairs) is S06 Park Street.
 4. **Data Analysis → Control Charts**.
-   - X-bar by 8-hour block (00:01-08:00, 08:01-16:00, 16:01-24:00), scope
-     *Whole network*: 63 blocks (3 a day for 21 days), X̿ = 46.40% open,
-     σ_short = 23.61, flat limits from the most common n = 2,880 (30 stations ×
-     96 polls): UCL 47.72, LCL 45.08; 26 of 63 blocks outside. The blocks follow
-     the daily commuter pattern, so blocks outside the limits are mostly that
-     predictable time-of-day pattern.
+   - X-bar by hourly block (00:01-01:00, 01:01-02:00, ... 23:01-24:00), scope
+     *Whole network*: 504 blocks (24 a day for 21 days), X̿ = 46.40% open,
+     σ_short = 23.55, flat limits from the most common n = 360 (30 stations ×
+     12 polls): UCL 50.12, LCL 42.67; 81 of 504 blocks outside. The hours
+     follow the daily commuter pattern, so blocks outside the limits are mostly
+     that predictable rush-hour pattern.
    - p-chart, fixed 10:00-15:00 window: p̄ = 0.0219, UCL = 0.1019 (n = 30),
      0 Thursday polls out. Switch to *All day*: 37 Thursday polls out, at rush hour.
 5. **Data Analysis → FMEA**. Top RPN: Slow van response 240 (S6 × O8 × D5:
@@ -55,8 +55,8 @@ begins rebalanced (see [the codebook](../data/README.md#commuter-flow-and-overni
 
 ## 2. `normal_week / seed 2`: same city, different random days
 
-Same shape, which shows the patterns are not luck: network X̿ = 46.38,
-σ_short = 23.46, n = 2,880, 32 of 63 blocks out. Unlike seed 1, the off-peak
+Same shape, which shows the patterns are not luck: network X̿ = 46.37,
+σ_short = 23.43, n = 360, 56 of 504 blocks out. Unlike seed 1, the off-peak
 p-chart shows 18 Thursday polls above the UCL (p̄ = 0.0139, UCL = 0.078): a
 Thursday that was worse than the Tuesday baseline. Repeat offenders: S16, S15, S18.
 
@@ -91,9 +91,9 @@ Thursday that was worse than the Tuesday baseline. Repeat offenders: S16, S15, S
 ## How to read the charts
 
 - A red diamond is outside the control limits; a dark dot is inside.
-- X-bar by 8-hour block: limits are one flat pair from the most common
-  subgroup size. Because fill follows the commuter day, some thirds of the day
-  sit outside by design; look for a block that breaks the usual weekly pattern.
+- X-bar by hourly block: limits are one flat pair from the most common
+  subgroup size. Because fill follows the commuter day, rush hours sit
+  outside by design; look for a block that breaks the usual weekly pattern.
 - p-chart: the fixed 10:00-15:00 window is the fair test; the all-day view
   signals at rush hour by design.
 - Every number above comes from `app/qc.py`; `python3 -m pytest tests -q`
