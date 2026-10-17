@@ -18,7 +18,9 @@ Every result is available as a **public REST API**, and the `/compute/...`
 endpoints run the same tested statistics on your own numbers.
 
 All data is **synthetic**: 30 stations at real Boston locations in 6
-neighborhoods, 8 vans, polled every 5 minutes for 3 weeks ([codebook](data/README.md)).
+neighborhoods, 8 vans, polled every 5 minutes for 3 weeks, with commuters
+riding into the city in the morning and home in the evening, and vans
+rebalancing gradually overnight ([codebook](data/README.md)).
 
 ## Run it (one command)
 
@@ -70,10 +72,10 @@ returns effective capacity 8, fill 75% ("high"), naive fill 50%, and the flag
 
 | Page | What it shows | How to read it |
 |---|---|---|
-| **Map** | a street map of Boston (OpenStreetMap) with every station colored *and shaped* by fill level, and the 8 vans; filters by district, status, time of last update, open docks, problem stations only; click a station for fill %, bikes, effective capacity, broken docks. Below it, the hour × weekday heatmap with the same filters | ▽ red empty, ◇ orange low, ● green medium, ■ blue high, ▲ purple full, ✕ dark gray out of service; a dashed ring marks a problem station, `!` a misleading fill. Dark weekday 7-9 AM and 4-6 PM heatmap cells are the rush pattern |
-| **Dispatch** | the forecast first: every station ranked by priority, projected bikes at +30 min, 1 h, 1.5 h and 2 h, at-risk rows in red, checked against what happened. Then recommended pickup → drop-off moves, a form to create a rebalancing task by hand, a task queue with Repair and Rebalancing tabs, and van status | only available vans (idle, not already assigned, with room for the bikes) are offered, nearest to the pick-up first; assignments are saved in your browser |
-| **Maintenance** | dock-health percentages (broken docks, broken bikes, effective capacity, misleading fill, repeat offenders), mean time to repair and backlog, and a table with a square for every dock (bike, broken bike, open, faulty ×, bike stuck !, never locks ∅) | ⚠ before a station name = misleading fill; the right-hand column is the repeat-offender report (3+ unplanned repairs and at least twice the network median) |
-| **Data Analysis** | tabs: FMEA (editable S/O/D, Pareto by RPN) and Control Charts (daily X-bar, p-chart) | under each chart: the formula, how many points fall outside, and what the subgroup is |
+| **Map** | a muted street map of Boston (OpenStreetMap, desaturated so markers stand out) with every station colored *and shaped* by fill level, and the 8 vans; filters by district, status, time of last update, open docks, problem stations only; click a station for fill %, bikes, effective capacity, broken docks. Below it, the hour × weekday heatmap with the same filters | ▽ red empty, ◇ orange low, ● green medium, ■ blue high, ▲ purple full, ✕ dark gray out of service; a dashed ring marks a problem station, `!` a misleading fill. Dark weekday 7-9 AM and 4-6 PM heatmap cells are the rush pattern |
+| **Dispatch** | the forecast first (subheading: ranked by priority, then expected impact): every station ranked by priority, projected bikes at +30 min, 1 h, 1.5 h and 2 h, at-risk rows in red, checked against what happened. Then light-blue summary boxes (moves, open tasks, vans available, resolution time), recommended pickup → drop-off moves, a form to create a rebalancing task by hand, a task queue with Repair and Rebalancing tabs, and van status | only available vans (idle, not already assigned, with room for the bikes) are offered, nearest to the pick-up first; assignments are saved in your browser |
+| **Maintenance** | light-blue dock-health percentage boxes (broken docks, broken bikes, effective capacity, misleading fill, repeat offenders) and a table with a square for every dock (bike, broken bike, open, faulty ×, bike stuck !, never locks ∅) | ⚠ before a station name = misleading fill; the right-hand column is the repeat-offender report (3+ unplanned repairs and at least twice the network median) |
+| **Data Analysis** | tabs: FMEA (editable S/O/D, Pareto by RPN) and Control Charts (X-bar by 3-hour block, p-chart) | under each chart: the formula, how many points fall outside, and what the subgroup is |
 
 The top bar on every page has the dataset, the snapshot time ("now" in the
 replay: Wed 08:15, Wed 12:00, Wed 17:30 or Sat 13:00 of week 3) and a
@@ -100,19 +102,21 @@ real system would get the first two from its public GBFS feed.
 | `fill_pct(bikes, capacity)`, `fill_category(...)` | bikes ÷ effective capacity; empty 0%, low 1-29%, medium 30-69%, high 70-99%, full 100% |
 | `misleading_flag(...)` | full only because docks are broken; "bikes" that are all broken; or looks emptier when broken docks count as capacity |
 | `event_log(polls)` | stockout / fullout episodes in one station's polls (API `/compute/stockouts` only) |
-| `xbar_chart(subgroups)` | X̿ = mean of subgroup means; σ_short = √(mean within-subgroup variance); limits X̿ ± 3σ_short/√n per subgroup |
-| `p_chart(baseline, monitor)` | p̄ ± 3√(p̄(1−p̄)/n), LCL floored at 0 |
+| `xbar_chart(subgroups, constant_limits)` | X̿ = mean of subgroup means; σ_short = √(mean within-subgroup variance); limits X̿ ± 3σ_short/√n, with n per subgroup or, as the dashboard uses, the most common n (`most_common_n`) for flat limits |
+| `p_chart(baseline, monitor, constant_limits)` | p̄ ± 3√(p̄(1−p̄)/n), LCL floored at 0; n per point or the most common n |
 | `rpn`, `occurrence_score`, `pareto` | RPN = S × O × D; observed rate → occurrence 1-10; Pareto order |
 | `median`, `repeat_offender_threshold` | repairs needed to be a repeat offender: max(3, 2 × network median) |
 | `series`, `parallel`, `availability`, `mtbf_mttr` | R₁R₂…; 1 − Π(1 − Rᵢ); MTBF/(MTBF + MTTR) (API only) |
 | `forecast_bikes(...)` | bikes now + (historical fill later − historical fill now) × capacity, at +30 min, 1 h, 1.5 h, 2 h |
 
 How the charts are set up:
-- **Daily X-bar** of % docks open: one subgroup per day (21 days); each
-  observation is one station's average for one clock hour of that day, so a
-  subgroup holds 24 × stations values. The rush swings sit inside each day, so
-  a day outside the limits ran unusually full or empty overall.
-- **p-chart** of the share of stations unusable per poll (n = 30): limits from
+- **X-bar by 3-hour block** of % docks open: one subgroup per block
+  (00:01-03:00, 03:01-06:00, ...; 8 a day, 168 in all); each observation is one
+  station's % open docks at one 5-minute poll, so a block holds 36 × stations
+  values. The limits are one flat pair from the most common n. Rush and night
+  blocks sit outside by design (the commuter day); a block that breaks its
+  usual weekly pattern is the one to look into.
+- **p-chart** of the share of stations unusable per poll (n = 30, the most common n): limits from
   Tuesday, Thursday plotted; a fixed 10:00-15:00 window avoids the rush
   signal. The y-axis starts at 0.
 

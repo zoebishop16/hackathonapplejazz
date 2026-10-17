@@ -20,6 +20,9 @@
   --bad: #d1342c;
   --limit: #d1342c;
   --mean: #2f3a45;
+  /* shared light blue for the summary boxes on Dispatch and Maintenance */
+  --box-blue: #e7f1fc;
+  --box-blue-line: #c4dbf3;
   --radius: 8px;
   --shadow: 0 1px 2px rgba(16, 24, 32, .06);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -163,6 +166,8 @@ tbody tr:hover { background: #fafbfc; }
 .district-label span { display: block; text-align: center; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #4b5560; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; white-space: nowrap; }
 .van-badge { display: inline-grid; place-items: center; min-width: 26px; height: 16px; padding: 0 3px; border-radius: 4px; background: #fff; border: 1.5px solid #3a3f45; color: #3a3f45; font-size: 10px; font-weight: 800; }
 .leaflet-container { font: inherit; }
+/* soften the street map (roads, buildings, parks, water) so station markers pop */
+.leaflet-tile-pane { filter: saturate(.25) brightness(1.12) contrast(.78); opacity: .8; }
 
 /* ------------------------------------------------------------------ heatmap */
 .heat { width: 100%; }
@@ -189,15 +194,9 @@ tbody tr:hover { background: #fafbfc; }
 .task.done { opacity: .55; }
 
 .cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-.kpi-red { border-left: 4px solid var(--bad); }
-.kpi-amber { border-left: 4px solid var(--warn); }
-.kpi-green { border-left: 4px solid var(--ok); }
-.kpi-purple { border-left: 4px solid var(--full); }
+.kpi-blue { background: var(--box-blue); border-color: var(--box-blue-line); }
+.card-h .subhead { display: block; font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 2px; }
 .kpi .v2 { font-size: 12px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: -2px; }
-.kpi-red { background: linear-gradient(90deg, #fdeeec, #fff 70%); } .kpi-red .v { color: #b42318; }
-.kpi-amber { background: linear-gradient(90deg, #fff4e0, #fff 70%); } .kpi-amber .v { color: #9a5a00; }
-.kpi-green { background: linear-gradient(90deg, #e8f6ec, #fff 70%); } .kpi-green .v { color: #1f6e35; }
-.kpi-purple { background: linear-gradient(90deg, #f3ebfa, #fff 70%); } .kpi-purple .v { color: #5e2a87; }
 .hazard { display: inline-block; width: 20px; }
 .warn-icon { color: #b26a00; font-size: 15px; cursor: help; }
 .indent { margin-left: 20px; }

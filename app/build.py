@@ -77,6 +77,11 @@ def load(folder):
     return stations, polls, faults, orders, vans
 
 
+def scheduled(o):
+    """Planned overnight rebalancing runs (not a response to a call)."""
+    return o["fault"].startswith("overnight")
+
+
 def fill_frac(p):
     """Fill as a fraction (0-1) for history; None when not usable."""
     pct = qc.fill_pct(p["ba"] + p["bd"], p["eff"]) if p["active"] else None
@@ -244,7 +249,8 @@ def snapshot(now, stations, polls, faults, orders, vans):
                          "queue": [o["order_id"] for o in mine]})
 
     def resolution(kind):
-        xs = [(o["resolved_at"] - o["opened_at"]).total_seconds() / 60 for o in done if o["order_type"] == kind]
+        xs = [(o["resolved_at"] - o["opened_at"]).total_seconds() / 60 for o in done
+              if o["order_type"] == kind and not scheduled(o)]
         return {"n": len(xs), "mean_min": r(qc.mean(xs), 1) if xs else None,
                 "median_min": r(sorted(xs)[len(xs) // 2], 1) if xs else None}
 
@@ -293,25 +299,39 @@ def heatmap(stations, polls):
     return out
 
 
-def hourly_open_pct(polls):
-    """{(day, hour): mean % open docks in that clock hour}, active polls only."""
+BLOCK_HOURS = 3  # control-chart subgroup: 00:01-03:00, 03:01-06:00, ... (8 per day)
+
+
+def block_open_pct(polls):
+    """{(day, block): [% open docks at each active poll]} for one station.
+
+    Block b of a day covers the polls after b*3:00 up to and including
+    (b+1)*3:00, so 03:00 belongs to 00:01-03:00 and midnight closes the
+    previous day's 21:01-24:00 block.
+    """
     acc = defaultdict(list)
     t0 = polls[0]["time"]
     for p in polls:
         if p["active"] and p["eff"] > 0:
-            acc[((p["time"] - t0).days, p["time"].hour)].append(100 * p["da"] / p["eff"])
-    return {k: qc.mean(v) for k, v in acc.items()}
+            t = p["time"] - timedelta(minutes=1)
+            day = (t - t0).days
+            if day < 0:  # 00:00 on the first day closes a block before the data starts
+                continue
+            acc[(day, t.hour // BLOCK_HOURS)].append(100 * p["da"] / p["eff"])
+    return acc
 
 
 def xbar_series(stations, polls):
-    """Daily X-bar chart of % docks open: one subgroup per day of the 3 weeks.
+    """X-bar chart of % docks open, one subgroup per 3-hour block (8 a day, 168 in all).
 
-    Each observation is one station's average % open docks in one clock hour of
-    that day, so a subgroup holds up to 24 x (stations in scope) values.
+    Each observation is one station's % open docks at one 5-minute poll in that
+    block, so a block holds up to 36 x (stations in scope) values. Limits use
+    the most common subgroup size for every point (flat limits).
     """
-    per = {s["station_id"]: hourly_open_pct(polls[s["station_id"]]) for s in stations}
+    per = {s["station_id"]: block_open_pct(polls[s["station_id"]]) for s in stations}
     t0 = polls[stations[0]["station_id"]][0]["time"]
     days = len(polls[stations[0]["station_id"]]) * 5 // 1440
+    blocks = 24 // BLOCK_HOURS
     scopes = {"network": [s["station_id"] for s in stations]}
     for d in sorted({s["district"] for s in stations}):
         scopes[f"district:{d}"] = [s["station_id"] for s in stations if s["district"] == d]
@@ -321,12 +341,14 @@ def xbar_series(stations, polls):
     for name, ids in scopes.items():
         groups = []
         for day in range(days):
-            vals = [per[i][(day, h)] for i in ids for h in range(24) if (day, h) in per[i]]
             date = t0 + timedelta(days=day)
-            groups.append((f"{DOW[date.weekday()]} {date.strftime('%m-%d')}", vals))
-        res = qc.xbar_chart(groups)
+            for b in range(blocks):
+                vals = [v for i in ids for v in per[i].get((day, b), [])]
+                h0, h1 = b * BLOCK_HOURS, (b + 1) * BLOCK_HOURS
+                groups.append((f"{DOW[date.weekday()]} {date.strftime('%m-%d')} {h0:02d}:01-{h1:02d}:00", vals))
+        res = qc.xbar_chart(groups, constant_limits=True)
         out[name] = {"grand_mean": r(res["grand_mean"]), "sigma_short": r(res["sigma_short"]),
-                     "message": res["message"], "subgroup": "day",
+                     "n_limits": res["n_limits"], "message": res["message"], "subgroup": "3-hour block",
                      "points": [{"label": p["label"], "n": p["n"], "mean": r(p["mean"]),
                                  "ucl": r(p["ucl"]), "lcl": r(p["lcl"]), "out": p["out"]}
                                 for p in res["points"]]}
@@ -346,8 +368,8 @@ def pchart(stations, polls):
         mon = [(x, n) for tm, x, n in per_poll if tm.weekday() == 3 and keep(tm)]
         times = [tm.strftime(FMT) for tm, x, n in per_poll if tm.weekday() == 1 and keep(tm)] + \
                 [tm.strftime(FMT) for tm, x, n in per_poll if tm.weekday() == 3 and keep(tm)]
-        res = qc.p_chart(base, mon)
-        out[name] = {"pbar": r(res["pbar"], 4), "message": res["message"], "n": len(stations),
+        res = qc.p_chart(base, mon, constant_limits=True)
+        out[name] = {"pbar": r(res["pbar"], 4), "message": res["message"], "n": len(stations), "n_limits": res["n_limits"],
                      "np_bar": r(res["pbar"] * len(stations), 2),
                      "points": [{"t": tm, "p": r(p["p"], 4), "ucl": r(p["ucl"], 4), "lcl": r(p["lcl"], 4),
                                  "phase": p["phase"], "out": p["out"]} for tm, p in zip(times, res["points"])],
@@ -359,14 +381,15 @@ def pchart(stations, polls):
 def fmea(stations, polls, orders):
     allp = [p for s in stations for p in polls[s["station_id"]]]
     act = [p for p in allp if p["active"]]
-    slow = sum(1 for o in orders if o["response_min"] > 30)
+    called = [o for o in orders if not scheduled(o)]  # dispatch calls, not planned overnight runs
+    slow = sum(1 for o in called if o["response_min"] > 30)
     modes = [
         ("Station empty", "0 rentable bikes", 7, 3, sum(p["ba"] == 0 for p in act), len(act), "active polls with 0 bikes"),
         ("Station full", "0 open docks", 7, 3, sum(p["da"] == 0 for p in act), len(act), "active polls with 0 open docks"),
         ("Docks disabled", "num_docks_disabled > 0", 5, 4, sum(p["dd"] > 0 for p in allp), len(allp), "polls with a broken dock"),
         ("Silent feed", "stale reading looks healthy", 6, 9, sum(p["age"] > STALE_MIN for p in allp), len(allp), f"polls with feed older than {STALE_MIN} min"),
         ("Kiosk offline", "offline or broken kiosk", 8, 2, sum(p["status"] in ("offline", "broken_kiosk") for p in allp), len(allp), "polls offline or broken kiosk"),
-        ("Slow van response", "response over 30 min", 6, 5, slow, len(orders), "work orders with response_min > 30"),
+        ("Slow van response", "response over 30 min", 6, 5, slow, len(called), "dispatched work orders with response_min > 30"),
     ]
     rows = []
     for name, effect, s, d, count, opp, desc in modes:

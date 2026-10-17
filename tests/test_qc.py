@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from app.qc import (availability, median, repeat_offender_threshold, effective_capacity, event_log, fill_category, fill_pct,
+from app.qc import (availability, median, most_common_n, repeat_offender_threshold, effective_capacity, event_log, fill_category, fill_pct,
                     forecast_bikes, misleading_flag, mtbf_mttr, occurrence_score,
                     p_chart, parallel, pareto, rpn, series, xbar_chart)
 
@@ -67,6 +67,30 @@ def test_xbar_known_answer():
     assert a["ucl"] == pytest.approx(52.3205, abs=1e-4)
     assert a["lcl"] == pytest.approx(17.6795, abs=1e-4)
     assert [p["out"] for p in r["points"]] == [False, False]
+
+
+def test_xbar_constant_limits_use_most_common_n():
+    # A and B have n = 3, C has n = 2; the most common n is 3, used for every point.
+    # sigma_short = sqrt((100 + 100 + 50) / 3) = 9.1287; SE = 9.1287 / sqrt(3) = 5.2705
+    # X-double-bar = (20 + 50 + 35) / 3 = 35; UCL = 50.8114, LCL = 19.1886 for all three
+    r = xbar_chart([("A", [10, 20, 30]), ("B", [40, 50, 60]), ("C", [30, 40])], constant_limits=True)
+    assert r["n_limits"] == 3 and r["sigma_short"] == pytest.approx(9.1287, abs=1e-4)
+    assert {round(p["ucl"], 4) for p in r["points"]} == {50.8114}
+    assert {round(p["lcl"], 4) for p in r["points"]} == {19.1886}
+    # without the option, C gets its own wider limits (n = 2)
+    assert xbar_chart([("A", [10, 20, 30]), ("B", [40, 50, 60]), ("C", [30, 40])])["points"][2]["ucl"] == pytest.approx(35 + 3 * 9.1287 / 2 ** 0.5, abs=1e-3)
+
+
+def test_most_common_n():
+    assert most_common_n([36, 36, 35, 36]) == 36
+    assert most_common_n([4, 5, 5, 4]) == 4  # tie -> the smaller n (wider limits)
+    with pytest.raises(ValueError):
+        most_common_n([])
+
+
+def test_p_chart_constant_limits():
+    r = p_chart([(2, 20), (2, 20), (1, 10)], [(7, 20)], constant_limits=True)
+    assert r["n_limits"] == 20 and len({p["ucl"] for p in r["points"]}) == 1
 
 
 def test_xbar_flags_planted_shift():

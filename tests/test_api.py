@@ -49,25 +49,26 @@ def test_station_detail_and_heatmap():
     assert len(h["percent"]) == 7 and len(h["percent"][0]) == 24
 
 
-def test_xbar_daily_subgroups():
-    """Recompute one daily subgroup straight from status.csv and compare with the API."""
+def test_xbar_three_hour_blocks():
+    """Recompute the first 3-hour block straight from status.csv and compare with the API."""
     import csv
-    from collections import defaultdict
-    from datetime import datetime
     x = client.get(f"/datasets/{DS}/xbar", params={"scope": "district:Back Bay"}).json()
-    assert x["subgroup"] == "day" and len(x["points"]) == 21 and x["points"][0]["label"] == "Mon 09-07"
+    assert x["subgroup"] == "3-hour block" and len(x["points"]) == 21 * 8
+    assert x["points"][0]["label"] == "Mon 09-07 00:01-03:00" and x["points"][1]["label"] == "Mon 09-07 03:01-06:00"
+    assert len({p["ucl"] for p in x["points"]}) == 1  # one flat pair of limits
     with open("data/normal_week/seed_1/stations.csv") as fh:
         ids = {s["station_id"] for s in csv.DictReader(fh) if s["district"] == "Back Bay"}
-    hours = defaultdict(list)
+    obs = []
     with open("data/normal_week/seed_1/status.csv") as fh:
         for row in csv.DictReader(fh):
-            if row["station_id"] in ids and row["timestamp"].startswith("2026-09-07") and row["status"] == "active":
+            t = row["timestamp"]
+            in_block = t.startswith("2026-09-07") and "00:05" <= t[11:] <= "03:00"
+            if row["station_id"] in ids and in_block and row["status"] == "active":
                 eff = int(row["num_bikes_available"]) + int(row["num_bikes_disabled"]) + int(row["num_docks_available"])
                 if eff:
-                    hours[(row["station_id"], row["timestamp"][11:13])].append(100 * int(row["num_docks_available"]) / eff)
-    obs = [sum(v) / len(v) for v in hours.values()]
+                    obs.append(100 * int(row["num_docks_available"]) / eff)
     first = x["points"][0]
-    assert first["n"] == len(obs) == 24 * len(ids)
+    assert first["n"] == len(obs) and x["n_limits"] == 36 * len(ids)
     assert first["mean"] == pytest.approx(sum(obs) / len(obs), abs=0.01)
     assert client.get(f"/datasets/{DS}/xbar", params={"scope": "district:Nowhere"}).status_code == 404
 

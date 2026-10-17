@@ -69,7 +69,7 @@ tasks:
       pytest tests (Python) or Rscript -e "testthat::test_dir('tests')" (R)
       passes, including one test that reproduces the SPEC section 4
       known-answer check and one degenerate case (constant data or n = 1).
-    result: "app/qc.py: fill, event log, daily X-bar, p-chart, FMEA, repeat-offender threshold, reliability, 2-hour forecast; 34 pytest (incl. an independent recompute of a daily subgroup) + 12 node checks pass; data rules checked by scripts/validate_data.py (50 PASS)."
+    result: "app/qc.py: fill, event log, X-bar by 3-hour block with flat limits from the most common n, p-chart, FMEA, repeat-offender threshold, reliability, 2-hour forecast; 35 pytest (incl. an independent recompute of a 3-hour block from status.csv) + 12 node checks pass; data rules incl. overnight rebalancing checked by scripts/validate_data.py (74 PASS)."
 
   - id: H-04
     title: Working tool - one demo copied to app/ and wired to the H-03 function

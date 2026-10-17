@@ -268,10 +268,11 @@ def maintenance(dataset_id: str, snapshot: Optional[str] = SnapshotQ, station: O
 @app.get("/datasets/{dataset_id}/xbar", tags=["control charts"])
 def xbar(dataset_id: str, scope: str = Query("network",
                                              description="network, district:<name>, or a station id like S07")):
-    """Daily averages (X-bar) chart of % docks open; subgroup = one day.
+    """X-bar chart of % docks open; subgroup = one 3-hour block (00:01-03:00, 03:01-06:00, ...).
 
-    Observations = each station's hourly average that day. UCL, LCL = grand
-    mean +/- 3 sigma_short / sqrt(n); sigma_short = sqrt(mean of
+    Observations = each station's % open docks at every 5-minute poll in the
+    block. UCL, LCL = grand mean +/- 3 sigma_short / sqrt(n), with n the most
+    common subgroup size (flat limits); sigma_short = sqrt(mean of
     within-subgroup variances).
     """
     d = _dataset(dataset_id)

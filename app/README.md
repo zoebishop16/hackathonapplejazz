@@ -36,7 +36,7 @@ GET: results for the four test datasets. `{id}` is one of `normal_week__seed_1`,
 | `/datasets/{id}/forecast` | at-risk list for the next 2 hours (+30 min, 1 h, 1.5 h, 2 h), ranked by priority |
 | `/datasets/{id}/dispatch` | recommended moves, repair and rebalancing queues, the 8 vans |
 | `/datasets/{id}/maintenance` | MTTR, backlog, repeat offenders and threshold, repair counts, tickets; `station` for one history |
-| `/datasets/{id}/xbar` | daily X-bar chart (subgroup = one day); `scope` = `network`, `district:Back Bay`, `S07`, ... |
+| `/datasets/{id}/xbar` | X-bar chart by 3-hour block (8 a day), flat limits from the most common n; `scope` = `network`, `district:Back Bay`, `S07`, ... |
 | `/datasets/{id}/pchart` | p-chart of unusable stations; `window` = `off_peak` or `all_day` |
 | `/datasets/{id}/fmea` | FMEA rows and Pareto order |
 | `/datasets/{id}/reliability` | per-station and network reliability, MTBF, MTTR, availability |

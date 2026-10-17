@@ -81,6 +81,56 @@ def validate(label, folder):
     check(f"{label}: weekend peaks in daylight (residential drains 12-15)",
           m[("residential", False, 13)] < m[("residential", False, 4)] - 0.1,
           f"residential weekend 4 AM {m[('residential', False, 4)]:.0%}, 1 PM {m[('residential', False, 13)]:.0%}")
+    over = [r for r in status if int(r["num_bikes_available"]) + int(r["num_docks_disabled"])
+            > int(info[r["station_id"]]["total_docks"])]
+    check(f"{label}: bikes_available + docks_disabled <= total_docks", not over, f"{len(over)} rows over")
+    check(f"{label}: evening rush (downtown empties, residential fills at 6 PM)",
+          m[("downtown", True, 18)] < 0.3 and m[("residential", True, 18)] > 0.7,
+          f"downtown 6 PM {m[('downtown', True, 18)]:.0%}; residential 6 PM {m[('residential', True, 18)]:.0%}")
+    # overnight: riders barely move bikes; vans step stations to a morning start
+    orders = read(os.path.join(folder, "work_orders.csv"))
+    visits = {(o["station_id"], o["arrived_at"][:15]) for o in orders if o["fault"].startswith("overnight")}
+    moves = defaultdict(list)
+    prev = {}
+    for r in status:
+        t = datetime.strptime(r["timestamp"], FMT)
+        bikes = int(r["num_bikes_available"]) + int(r["num_bikes_disabled"])
+        key = r["station_id"]
+        if key in prev and r["status"] == "active":
+            night = t.hour >= 23 or t.hour < 5
+            rush = t.weekday() < 5 and (7 <= t.hour < 9 or 16 <= t.hour < 18)
+            near_visit = any((key, (t - timedelta(minutes=k)).strftime(FMT)[:15]) in visits for k in (0, 5))
+            if night and not near_visit:
+                moves["night"].append(abs(bikes - prev[key]))
+            elif rush:
+                moves["rush"].append(abs(bikes - prev[key]))
+        prev[key] = bikes
+    night_mv = sum(moves["night"]) / len(moves["night"])
+    rush_mv = sum(moves["rush"]) / len(moves["rush"])
+    check(f"{label}: little rider movement overnight (< 20% of rush-hour)", night_mv < 0.2 * rush_mv,
+          f"{night_mv:.3f} vs {rush_mv:.3f} bikes per poll ({night_mv / rush_mv:.0%})")
+    check(f"{label}: morning starts rebalanced, not stuck at the evening end state",
+          m[("residential", True, 4)] < m[("residential", True, 22)] - 0.08 and 0.6 < m[("residential", True, 4)] < 0.85
+          and m[("downtown", True, 4)] > m[("downtown", True, 22)] + 0.1 and 0.2 < m[("downtown", True, 4)] < 0.45,
+          f"residential 10 PM {m[('residential', True, 22)]:.0%} -> 4 AM {m[('residential', True, 4)]:.0%}; "
+          f"downtown 10 PM {m[('downtown', True, 22)]:.0%} -> 4 AM {m[('downtown', True, 4)]:.0%}")
+    nights = defaultdict(set)
+    for o in orders:
+        if o["fault"].startswith("overnight"):
+            t = datetime.strptime(o["arrived_at"], FMT)
+            nights[(t - timedelta(hours=5)).date()].add(t.hour)
+    last = max(nights) if nights else None  # the final night runs past the end of the data
+    # weeknights only (Mon-Thu evening into a weekday morning): on weekend nights the
+    # evening and morning levels are close, so a visit's share often rounds to 0 bikes
+    full = {k: v for k, v in nights.items() if k != last and k.weekday() <= 3}
+    nights = full
+    spread = min(len(h) for h in nights.values()) if nights else 0
+    check(f"{label}: overnight rebalancing is gradual (weeknight visits spread over 4+ clock hours)",
+          len(nights) >= 11 and spread >= 4, f"{len(nights)} weeknights, at least {spread} distinct hours per night")
+    mid = m[("residential", True, 1)]
+    check(f"{label}: 1 AM sits between the evening and morning levels (gradual)",
+          m[("residential", True, 4)] < mid < m[("residential", True, 22)],
+          f"residential 10 PM {m[('residential', True, 22)]:.0%}, 1 AM {mid:.0%}, 4 AM {m[('residential', True, 4)]:.0%}")
     check(f"{label}: broken bikes are uncommon (< 0.25 per station-poll)", s["broken_bikes_mean"] < 0.25,
           f"{s['broken_bikes_mean']:.3f} per station-poll")
     check(f"{label}: 7-8 vans", 7 <= len(vans) <= 8, f"{len(vans)} vans")

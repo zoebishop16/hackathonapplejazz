@@ -211,7 +211,6 @@ function pageMapAll(el) {
           <div class="leaflet-box" id="leaflet" role="region" aria-label="Map of Boston bikeshare stations"><div class="state"><div class="spinner"></div>Loading map...</div></div>
           <div class="side" id="side">${sidePanel()}</div>
         </div>
-        <p class="howto" style="margin:0 14px 12px">Fill % = bikes in docks ÷ effective capacity (total docks − broken docks). Faded stations are hidden by the filters. Hover or click a station for its counts; drag and scroll to move around Boston.</p>
       </div>
       ${heatmapCard(ids)}
     </div></div>`;
@@ -380,16 +379,11 @@ function pageMaintenanceAll(el) {
   const dockLegend = `<div class="legend">${Object.entries(DOCK_STATES).map(([k, [lab, sym]]) => `<span class="item"><span class="dock ${k}" aria-hidden="true">${sym}</span>${lab}</span>`).join("")}<span class="item"><b style="color:#8a5200">⚠</b> Misleading fill</span></div>`;
   el.innerHTML = `<div class="stack">
     <div class="grid cols-5">
-      ${pctKpi("kpi-red", p(brokenDocks, total), `${brokenDocks} of ${total} docks`, "broken docks")}
-      ${pctKpi("kpi-amber", p(brokenBikes, bikes), `${brokenBikes} of ${bikes} docked bikes`, "broken bikes in docks")}
-      ${pctKpi("kpi-green", p(total - brokenDocks, total), `${total - brokenDocks} of ${total} docks`, "effective capacity (usable docks)")}
-      ${pctKpi("kpi-amber", p(flagged, n), `${flagged} of ${n} stations`, "stations with misleading fill")}
-      ${pctKpi("kpi-purple", p(repeat, n), `${repeat} of ${n} stations`, `repeat offenders (${fmt(thr, 0)}+ unplanned repairs)`)}
-    </div>
-    <div class="grid cols-3">
-      <div class="card kpi"><div class="v">${m.mttr_min === null ? "—" : dur(m.mttr_min)}</div><div class="l">mean time to repair (opened → resolved, ${m.mttr_n} unplanned repairs)</div></div>
-      <div class="card kpi"><div class="v">${m.backlog}</div><div class="l">backlog: repair tickets open now</div></div>
-      <div class="card kpi"><div class="v">${m.backlog_unassigned}</div><div class="l">open and not yet assigned</div></div>
+      ${pctKpi("kpi-blue", p(brokenDocks, total), `${brokenDocks} of ${total} docks`, "broken docks")}
+      ${pctKpi("kpi-blue", p(brokenBikes, bikes), `${brokenBikes} of ${bikes} docked bikes`, "broken bikes in docks")}
+      ${pctKpi("kpi-blue", p(total - brokenDocks, total), `${total - brokenDocks} of ${total} docks`, "effective capacity (usable docks)")}
+      ${pctKpi("kpi-blue", p(flagged, n), `${flagged} of ${n} stations`, "stations with misleading fill")}
+      ${pctKpi("kpi-blue", p(repeat, n), `${repeat} of ${n} stations`, `repeat offenders (${fmt(thr, 0)}+ unplanned repairs)`)}
     </div>
     <div class="card">
       <div class="card-h"><h2>Dock health at ${esc(shortTime(snap.time))}</h2>${dockLegend}</div>
@@ -442,7 +436,6 @@ function vanSelect(attr, choices) {
 function pageDispatchAll(el) {
   const snap = snapData();
   const fc = snap.forecast;
-  const risky = fc.filter((i) => i.urgency > 0);
   const firstH = (i) => (i.urgency === 5 ? 0 : i.minutes_to_hit);
   const actualAt = (i) => (i.urgency === 5 ? i.actual30 : i.minutes_to_hit ? i[`actual${i.minutes_to_hit}`] : null);
   const check = (i) => {
@@ -450,8 +443,6 @@ function pageDispatchAll(el) {
     if (!i.risk || !act) return "—";
     return act === i.risk ? `<span class="badge ok">✓ happened</span>` : `<span class="badge">✗ was ${esc(act)}</span>`;
   };
-  const scored = risky.filter((i) => actualAt(i));
-  const hits = scored.filter((i) => actualAt(i) === i.risk).length;
   const PRI = { high: ["High", "bad"], medium: ["Medium", "warn"], low: ["Low", ""], none: ["—", ""] };
 
   const orders = Object.fromEntries(S.data.orders.map((o) => [o.id, o]));
@@ -528,15 +519,8 @@ function pageDispatchAll(el) {
   const nFree = vans.filter((v) => v.status === "idle" && !busy.has(v.van)).length;
 
   el.innerHTML = `<div class="stack">
-    <div class="grid cols-5">
-      <div class="card kpi kpi-red"><div class="v">${risky.filter((i) => i.urgency === 5).length}</div><div class="l">empty or full now</div></div>
-      <div class="card kpi kpi-red"><div class="v">${risky.filter((i) => i.urgency === 4).length}</div><div class="l">projected to hit within 30 min</div></div>
-      <div class="card kpi kpi-amber"><div class="v">${risky.filter((i) => i.urgency === 3).length}</div><div class="l">within 1 hour</div></div>
-      <div class="card kpi kpi-amber"><div class="v">${risky.filter((i) => i.urgency <= 2).length}</div><div class="l">within 1.5-2 hours</div></div>
-      <div class="card kpi"><div class="v">${scored.length ? `${hits}/${scored.length}` : "—"}</div><div class="l">flags that came true (checked against the replay)</div></div>
-    </div>
     <div class="card">
-      <div class="card-h"><h2>Forecast & at-risk stations · ranked by priority, then expected impact</h2>
+      <div class="card-h"><h2>Forecast & at-risk stations<span class="subhead">Ranked by priority, then expected impact</span></h2>
         <div class="legend"><span class="item"><span class="swatch risk-high"></span>High priority (now or ≤ 30 min)</span><span class="item"><span class="swatch risk"></span>At risk within 2 h</span></div></div>
       <div class="table-wrap"><table class="forecast"><thead><tr><th class="num">Rank</th><th>Station</th><th>Priority</th><th>Risk</th><th>When</th><th class="num">Bikes now / eff.</th>${HORIZONS.map((m) => `<th class="num">+${m < 60 ? `${m} min` : `${m / 60} h`}</th>`).join("")}<th class="num">Impact (bikes)</th><th>Check</th></tr></thead>
       <tbody>${fc.map((i) => `<tr class="${i.priority === "high" ? "risk-high" : i.urgency > 0 ? "risk" : ""}"><td class="num">${i.rank}</td><td>${esc(stName(i.id))}<div class="small muted">${esc(stationInfo(i.id).district)}</div></td>
@@ -549,10 +533,10 @@ function pageDispatchAll(el) {
       </div>
     </div>
     <div class="grid cols-4">
-      <div class="card kpi"><div class="v">${snap.moves.length}</div><div class="l">recommended moves</div></div>
-      <div class="card kpi"><div class="v">${repairTasks.length + rebalCount}</div><div class="l">open tasks (${repairTasks.length} repair · ${rebalCount} rebalancing)</div></div>
-      <div class="card kpi"><div class="v">${nFree} / ${vans.length}</div><div class="l">vans available now</div></div>
-      <div class="card kpi"><div class="v">${res.rebalance.median_min === null ? "—" : dur(res.rebalance.median_min)}</div><div class="l">median time to resolve a rebalance (${res.rebalance.n} done)</div></div>
+      <div class="card kpi kpi-blue"><div class="v">${snap.moves.length}</div><div class="l">recommended moves</div></div>
+      <div class="card kpi kpi-blue"><div class="v">${repairTasks.length + rebalCount}</div><div class="l">open tasks (${repairTasks.length} repair · ${rebalCount} rebalancing)</div></div>
+      <div class="card kpi kpi-blue"><div class="v">${nFree} / ${vans.length}</div><div class="l">vans available now</div></div>
+      <div class="card kpi kpi-blue"><div class="v">${res.rebalance.median_min === null ? "—" : dur(res.rebalance.median_min)}</div><div class="l">median time to resolve a rebalance call (${res.rebalance.n} done)</div></div>
     </div>
     ${form}
     <div class="grid dispatch">
@@ -685,15 +669,14 @@ function tabFmea(el) {
 function tabControl(el) {
   const scopes = Object.keys(S.data.xbar);
   const xb = S.data.xbar[S.xbarScope] || S.data.xbar.network;
-  const xLabels = xb.points.map((p, i) => [i, p.label]).filter(([, lab]) => lab.startsWith("Mon"));
+  const xLabels = xb.points.map((p, i) => [i, p.label.slice(0, 9)]).filter(([i, lab]) => lab.startsWith("Mon") && xb.points[i].label.endsWith("00:01-03:00"));
   const scopeLabel = (k) => (k === "network" ? "Whole network" : k.startsWith("district:") ? `District: ${k.slice(9)}` : `Station ${stName(k)}`);
   const nStations = S.xbarScope === "network" ? S.data.stations.length : S.xbarScope.startsWith("district:") ? S.data.stations.filter((s) => s.district === S.xbarScope.slice(9)).length : 1;
-  const ns = [...new Set(xb.points.map((p) => p.n))];
   const xbOut = xb.points.filter((p) => p.out);
   const pc = S.data.pchart[S.pWindow];
   const tueCount = pc.points.filter((p) => p.phase === "baseline").length;
   el.innerHTML = `<div class="stack">
-    <div class="card"><div class="card-h"><h2>Daily averages (X-bar) chart · % of docks open</h2>
+    <div class="card"><div class="card-h"><h2>Averages (X-bar) chart by 3-hour block · % of docks open</h2>
       <label class="row small">Scope <select id="xb-scope">${scopes.map((k) => `<option value="${k}" ${k === S.xbarScope ? "selected" : ""}>${esc(scopeLabel(k))}</option>`).join("")}</select></label></div>
       <div class="card-b">
         ${xb.message ? `<p class="badge warn">${esc(xb.message)}</p>` : ""}
@@ -702,9 +685,9 @@ function tabControl(el) {
           pointTip: (p) => `${p.label}: mean ${fmt(p.mean, 1)}% open (n = ${p.n})\nUCL ${fmt(p.ucl, 1)} · LCL ${fmt(p.lcl, 1)}${p.out ? "\nOUTSIDE LIMITS" : ""}` })}
         ${chartLegend}
         <div class="grid cols-3 chart-notes">
-          <div class="formula">UCL, LCL = X̿ ± 3 · σ_short / √n<br>X̿ = ${fmt(xb.grand_mean, 2)}%<br>σ_short = √(mean of subgroup variances) = ${fmt(xb.sigma_short, 2)}<br>n per subgroup = ${ns.length === 1 ? ns[0] : `${Math.min(...ns)}-${Math.max(...ns)}`}</div>
-          <div class="small"><b>${xbOut.length} of ${xb.points.length}</b> days outside the limits.</div>
-          <p class="howto" style="margin:0">Subgroup = one day: each station's 24 hourly averages of % open docks (${nStations} station${nStations === 1 ? "" : "s"} × 24 hours).</p>
+          <div class="formula">UCL, LCL = X̿ ± 3 · σ_short / √n<br>X̿ = ${fmt(xb.grand_mean, 2)}%<br>σ_short = √(mean of subgroup variances) = ${fmt(xb.sigma_short, 2)}<br>n = ${xb.n_limits} (most common subgroup size, used for every limit)<br>UCL = ${fmt(xb.points[0].ucl, 2)}, LCL = ${fmt(xb.points[0].lcl, 2)}</div>
+          <div class="small"><b>${xbOut.length} of ${xb.points.length}</b> blocks outside the limits.</div>
+          <p class="howto" style="margin:0">Subgroup = one 3-hour block (00:01-03:00, 03:01-06:00, ... 8 a day): % open docks at every 5-minute poll in the block (${nStations} station${nStations === 1 ? "" : "s"} × 36 polls).</p>
         </div>
       </div></div>
     <div class="card"><div class="card-h"><h2>p-chart · proportion of stations unusable at each poll</h2>
@@ -716,7 +699,7 @@ function tabControl(el) {
           pointTip: (p) => `${p.t}: ${fmt(p.p * pc.n, 0)} of ${pc.n} unusable (p = ${fmt(p.p, 2)})${p.out ? "\nOUTSIDE LIMITS" : ""}` })}
         ${chartLegend}
         <div class="grid cols-3 chart-notes">
-          <div class="formula">UCL, LCL = p̄ ± 3 √(p̄(1 − p̄)/n)<br>p̄ = ${fmt(pc.pbar, 4)} (Tuesdays), n = ${pc.n} stations<br>UCL = ${fmt(pc.points[0].ucl, 4)}, LCL = ${fmt(pc.points[0].lcl, 4)}</div>
+          <div class="formula">UCL, LCL = p̄ ± 3 √(p̄(1 − p̄)/n)<br>p̄ = ${fmt(pc.pbar, 4)} (Tuesdays), n = ${pc.n_limits} (most common n, every poll)<br>UCL = ${fmt(pc.points[0].ucl, 4)}, LCL = ${fmt(pc.points[0].lcl, 4)}</div>
           <div class="small">Tuesday polls outside: ${pc.out_baseline}. <b>Thursday polls outside: ${pc.out_monitor}</b>.</div>
           <p class="howto" style="margin:0">Subgroup = one 5-minute poll of all ${pc.n} stations (unusable = out of service, 0 bikes or 0 open docks).</p>
         </div>

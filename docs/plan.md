@@ -9,7 +9,8 @@ Source: the team's design document ("Design of Website.pdf"); SPEC.md section 4 
 - Python 3.11 for the API bundle (`app/.python-version`); built JSON in `app/site/data/` is committed because the API serves it.
 - Map: schematic SVG (no tiles, no keys). 20 stations, 4 districts.
 - "Now" in the live pages = four replay snapshots in week 3 (Wed 08:15, 12:00, 17:30; Sat 13:00).
-- Pages (revised): Map (live map + heatmap), Dispatch (forecast + dispatch), Maintenance (dock health + maintenance), Data Analysis (FMEA, daily X-bar, p-chart). No roles or logins. Map = Leaflet over OpenStreetMap tiles.
+- Pages (revised): Map (live map + heatmap), Dispatch (forecast + dispatch), Maintenance (dock health + maintenance), Data Analysis (FMEA, X-bar by 3-hour block, p-chart). No roles or logins. Map = Leaflet over OpenStreetMap tiles.
+- Data (revised again): overnight 11 PM-5 AM riders barely move bikes and vans step each station from the evening end state to a morning start in 2-4 spread-out visits (logged as overnight work orders, left out of response-time stats).
 - Data (revised): 30 stations at real Boston locations, 6 neighborhoods as districts (3-6 each), 8 vans; `scripts/validate_data.py` checks every rule.
 
 ## Tasks
@@ -26,5 +27,5 @@ Source: the team's design document ("Design of Website.pdf"); SPEC.md section 4 
 
 ## Formulas (see SPEC 4)
 fill % = bikes / (total docks - broken docks); X-bar limits = X̿ ± 3 σ_short/√n, σ_short = √mean(s²);
-daily X-bar: subgroup = one day, observations = station-hour means; p = p̄ ± 3√(p̄(1-p̄)/n); RPN = S·O·D; repeat offender = max(3, 2 × median repairs);
+X-bar: subgroup = 3-hour block (00:01-03:00, ...), observations = station % open at each poll, flat limits from the most common n; p = p̄ ± 3√(p̄(1-p̄)/n); RPN = S·O·D; repeat offender = max(3, 2 × median repairs);
 series ΠR, parallel 1-Π(1-R), A = MTBF/(MTBF+MTTR); forecast = bikes + (hist fill later - hist fill now)·capacity.

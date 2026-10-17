@@ -128,17 +128,31 @@ def variance(xs):
     return math.fsum((x - m) ** 2 for x in xs) / (len(xs) - 1)
 
 
-def xbar_chart(subgroups):
+def most_common_n(sizes):
+    """The most common sample size; on a tie, the smallest (wider, more cautious limits)."""
+    sizes = [n for n in sizes if n > 0]
+    if not sizes:
+        raise ValueError("no sample sizes")
+    counts = {}
+    for n in sizes:
+        counts[n] = counts.get(n, 0) + 1
+    top = max(counts.values())
+    return min(n for n, c in counts.items() if c == top)
+
+
+def xbar_chart(subgroups, constant_limits=False):
     """Averages (X-bar) chart with limits from the within-subgroup spread.
 
     subgroups: ordered list of (label, [values]).
     Grand mean X-double-bar = mean of the subgroup means.
     sigma_short = sqrt(mean of the within-subgroup variances), over subgroups
     with n >= 2 (a single value has no within-subgroup spread).
-    For each subgroup: SE = sigma_short / sqrt(n), UCL/LCL = X-double-bar +/- 3 SE.
-    Returns grand_mean, sigma_short, message, and points (label, n, mean,
-    ucl, lcl, out). Limits are None with a message when sigma_short is 0 or
-    no subgroup has two values.
+    SE = sigma_short / sqrt(n), UCL/LCL = X-double-bar +/- 3 SE, where n is each
+    subgroup's own size, or, with constant_limits=True, the most common
+    subgroup size for every point (one flat pair of limits for the chart).
+    Returns grand_mean, sigma_short, n_limits (None unless constant), message,
+    and points (label, n, mean, ucl, lcl, out). Limits are None with a message
+    when sigma_short is 0 or no subgroup has two values.
     """
     pts = [(lab, list(v)) for lab, v in subgroups if len(v) > 0]
     if not pts:
@@ -147,6 +161,7 @@ def xbar_chart(subgroups):
     grand = mean(means)
     variances = [variance(v) for _, v in pts if len(v) >= 2]
     sigma = math.sqrt(mean(variances)) if variances else None
+    n_limits = most_common_n([len(v) for _, v in pts]) if constant_limits else None
     message = None
     if sigma is None:
         message = "every subgroup has one value: no within-subgroup variation to set limits"
@@ -155,47 +170,50 @@ def xbar_chart(subgroups):
     points = []
     for (lab, v), m in zip(pts, means):
         if sigma:
-            se = sigma / math.sqrt(len(v))
+            se = sigma / math.sqrt(n_limits or len(v))
             ucl, lcl = grand + 3 * se, grand - 3 * se
             out = m > ucl or m < lcl
         else:
             ucl = lcl = None
             out = False
         points.append({"label": lab, "n": len(v), "mean": m, "ucl": ucl, "lcl": lcl, "out": out})
-    return {"grand_mean": grand, "sigma_short": sigma, "message": message, "points": points}
+    return {"grand_mean": grand, "sigma_short": sigma, "n_limits": n_limits, "message": message, "points": points}
 
 
 # ----------------------------------------------------------------- p-chart
 
-def p_chart(baseline, monitor=()):
-    """Proportion chart; p-bar from the baseline, limits per point by its n.
+def p_chart(baseline, monitor=(), constant_limits=False):
+    """Proportion chart; p-bar from the baseline.
 
     baseline, monitor: lists of (defectives, n). Here a "defective" is an
     unusable station at one poll (out of service, 0 bikes or 0 docks) and n is
     the number of stations polled.
     p-bar = total defectives / total n over the baseline.
     UCL/LCL = p-bar +/- 3 sqrt(p-bar (1 - p-bar) / n); LCL floored at 0, UCL
-    capped at 1.
+    capped at 1. n is each point's own size, or, with constant_limits=True, the
+    most common n over all points (one flat pair of limits).
     """
     base = list(baseline)
+    mon = list(monitor)
     tot_n = sum(n for _, n in base)
     if tot_n == 0:
         raise ValueError("baseline has no observations")
     pbar = sum(x for x, _ in base) / tot_n
+    n_limits = most_common_n([n for _, n in base + mon]) if constant_limits else None
     points = []
-    for phase, rows in (("baseline", base), ("monitor", list(monitor))):
+    for phase, rows in (("baseline", base), ("monitor", mon)):
         for x, n in rows:
             if n <= 0:
                 continue
             p = x / n
-            half = 3 * math.sqrt(pbar * (1 - pbar) / n)
+            half = 3 * math.sqrt(pbar * (1 - pbar) / (n_limits or n))
             ucl, lcl = min(1.0, pbar + half), max(0.0, pbar - half)
             points.append({"p": p, "n": n, "ucl": ucl, "lcl": lcl, "phase": phase,
                            "out": (p > ucl or p < lcl) if half > 0 else False})
     msg = None
     if pbar in (0.0, 1.0):
         msg = "p-bar is %g: no variation, limits collapse" % pbar
-    return {"pbar": pbar, "message": msg, "points": points}
+    return {"pbar": pbar, "n_limits": n_limits, "message": msg, "points": points}
 
 
 # -------------------------------------------------------------------- FMEA

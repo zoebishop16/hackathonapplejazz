@@ -15,6 +15,9 @@ The rules (from the team's design document, revised):
 - weekday rush hours 7-9 AM and 4-6 PM: residential stations empty out in the
   morning and downtown stations fill up; the evening reverses it
 - weekends peak in daylight
+- overnight (11 PM-5 AM) riders barely move bikes; vans visit each station 2-4
+  times, spread over the night, to step it from the evening end state to a
+  realistic morning start (logged as overnight rebalance work orders)
 - a few stations have broken docks or go offline; far more in high_failure_week
 - broken bikes are uncommon (well under 1 per station on average)
 """
@@ -100,35 +103,64 @@ def interp(points, h):
     return points[-1][1]
 
 
-# Target fill fraction by hour, per profile. Weekday rush hours: 7-9 and 16-18.
+# Rider-driven fill fraction by hour, per profile, for the riding day 5 AM-11 PM.
+# Weekday rush hours 7-9 and 16-18: in the morning riders go INTO the city
+# (residential stations drain, downtown fills); in the evening they go home
+# (downtown drains, residential fills). The value at 23 is the evening END
+# state; the value at 5 is the MORNING START state that overnight vans restore.
+NIGHT_START, NIGHT_END = 23, 5   # 11 PM to 5 AM: almost no riders, vans rebalance
 WEEKDAY = {
-    "residential": [(0, .72), (6.5, .72), (7, .6), (8, .12), (9, .05), (10, .15),
-                    (15, .35), (16, .4), (17, .7), (18, .9), (20, .8), (24, .72)],
-    "downtown": [(0, .3), (6.5, .3), (7, .4), (8, .85), (9, .97), (10, .9),
-                 (15, .8), (16, .7), (17, .3), (18, .06), (20, .15), (24, .3)],
-    "mixed": [(0, .5), (7, .5), (8.5, .7), (10, .62), (16, .58), (17.5, .35),
-              (19, .45), (24, .5)],
+    "residential": [(5, .74), (6.5, .74), (7, .62), (8, .12), (9, .05), (10, .15),
+                    (15, .35), (16, .4), (17, .7), (18, .9), (23, .93)],
+    "downtown": [(5, .32), (6.5, .32), (7, .4), (8, .85), (9, .97), (10, .9),
+                 (15, .8), (16, .7), (17, .3), (18, .06), (23, .07)],
+    "mixed": [(5, .5), (7, .5), (8.5, .7), (10, .62), (16, .58), (17.5, .35),
+              (19, .4), (23, .38)],
 }
 WEEKEND = {
-    "residential": [(0, .65), (9, .62), (12, .38), (15, .33), (18, .5), (21, .62), (24, .65)],
-    "downtown": [(0, .4), (9, .42), (12, .62), (15, .66), (18, .5), (21, .42), (24, .4)],
-    "mixed": [(0, .45), (9, .45), (12, .72), (15, .82), (18, .6), (21, .48), (24, .45)],
+    "residential": [(5, .68), (9, .66), (12, .4), (15, .35), (18, .5), (21, .6), (23, .62)],
+    "downtown": [(5, .42), (9, .44), (12, .62), (15, .66), (18, .52), (21, .45), (23, .44)],
+    "mixed": [(5, .46), (9, .46), (12, .72), (15, .82), (18, .6), (21, .5), (23, .48)],
 }
 
 
 def target_fill(profile, dow, hour, amp, offset):
+    """Rider-driven target fill for a daytime hour (5 <= hour <= 23)."""
     table = WEEKDAY if dow < 5 else WEEKEND
-    base = interp(table[profile], hour)
+    base = interp(table[profile], min(max(hour, NIGHT_END), NIGHT_START))
     return min(1.0, max(0.0, 0.5 + (base - 0.5) * amp + offset))
 
 
+def is_night(hour):
+    return hour >= NIGHT_START or hour < NIGHT_END
+
+
 def noise_sd(dow, hour):
-    """Ride activity: more wobble in daylight, most during weekday rushes."""
+    """Ride activity: most wobble in weekday rushes, some in daylight, almost none overnight."""
+    if is_night(hour):
+        return 0.002
     if dow < 5 and (7 <= hour < 9 or 16 <= hour < 18):
         return 0.045
     if 7 <= hour < 21:
         return 0.03
-    return 0.008
+    return 0.012
+
+
+def night_plan(rng):
+    """Overnight van visit times for one station: 2-4 visits spread over 11 PM-5 AM.
+
+    Returns {night: sorted visit minutes}; night n runs from 23:00 on day n to
+    05:00 on day n + 1.
+    """
+    plan = {}
+    for n in range(DAYS):
+        start = n * 1440 + NIGHT_START * 60
+        end = (n + 1) * 1440 + NIGHT_END * 60
+        k = rng.randint(2, 4)
+        # one visit in each of k equal slices of the night, so they are spread out
+        width = (end - start) / k
+        plan[n] = [snap(start + width * (i + rng.uniform(0.15, 0.85))) for i in range(k)]
+    return plan
 
 
 def iso(minute):
@@ -252,6 +284,8 @@ def simulate(rng, stations, faults, orders, cfg, vans):
         prev_bikes = None
         empty_since = full_since = None
         amp = st["amp"] * cfg["demand_amp"]
+        plan = night_plan(rng)
+        visit_at = {m: n for n, ms in plan.items() for m in ms}
         for i in range(POLLS):
             minute = i * POLL_MIN
             day, mod = divmod(minute, 1440)
@@ -265,7 +299,24 @@ def simulate(rng, stations, faults, orders, cfg, vans):
             oos = next((f["kind"] for f in active if f["kind"] in OUT_OF_SERVICE), None)
             silent = any(f["kind"] == "silent_feed" for f in active)
 
-            tgt = target_fill(st["profile"], dow, hour, amp, st["offset"])
+            if is_night(hour):
+                # night n: from the evening end state E toward the next morning's start M,
+                # one step per van visit (riders barely move the level)
+                n = day if hour >= NIGHT_START else day - 1
+                if n < 0:  # the first night before the data starts: already at M
+                    tgt = target_fill(st["profile"], dow, NIGHT_END, amp, st["offset"])
+                else:
+                    e_lvl = target_fill(st["profile"], n % 7, NIGHT_START, amp, st["offset"])
+                    m_lvl = target_fill(st["profile"], (n + 1) % 7, NIGHT_END, amp, st["offset"])
+                    ms = plan[n]
+                    done = sum(1 for v in ms if v <= minute)
+                    tgt = e_lvl + (m_lvl - e_lvl) * done / len(ms)
+                    if minute in visit_at and oos is None:
+                        moved = round(abs(m_lvl - e_lvl) / len(ms) * eff)
+                        if moved:
+                            overnight_order(rng, orders, sid, minute, m_lvl < e_lvl, moved, vans)
+            else:
+                tgt = target_fill(st["profile"], dow, hour, amp, st["offset"])
             if oos is None:
                 dev = 0.97 * dev + rng.gauss(0, noise_sd(dow, hour))
             # a rebalancing van arrives: reset the station to about half full
@@ -316,6 +367,16 @@ def simulate(rng, stations, faults, orders, cfg, vans):
                     full_since = None
                 pending.sort()
     return rows
+
+
+def overnight_order(rng, orders, sid, minute, pickup, moved, vans):
+    """A scheduled overnight rebalancing visit: the van arrives at `minute`."""
+    opened = minute - rng.uniform(10, 25)  # scheduled at the start of the run
+    orders.append({"station_id": sid, "order_type": "rebalance",
+                   "fault": "overnight_pickup" if pickup else "overnight_dropoff",
+                   "opened": opened, "assigned": opened + rng.uniform(1, 5),
+                   "arrived": minute, "resolved": minute + rng.uniform(5, 12),
+                   "van_id": rng.choice(vans)["van_id"], "bikes_moved": moved})
 
 
 def dispatch(rng, orders, sid, kind, minute, cfg, vans, eff):

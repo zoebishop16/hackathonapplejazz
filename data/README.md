@@ -24,7 +24,7 @@ Built-in patterns:
 - **Weekday rush hours 7-9 AM and 4-6 PM.** Residential stations (South
   Boston, Jamaica Plain, Charlestown) empty out in the morning and refill in
   the evening; Downtown and Back Bay fill up in the morning and empty in the
-  evening. Fenway is mixed.
+  evening. Fenway is mixed. See [Commuter flow](#commuter-flow-and-overnight-rebalancing).
 - **Weekends** peak in daylight (about 10 AM-5 PM): residential stations drain,
   Downtown, Back Bay and Fenway fill.
 - **Failures:** broken docks, offline or broken kiosks, blocked stations,
@@ -32,9 +32,58 @@ Built-in patterns:
   Some stations are "chronic" and fail 2-3x as often.
 - **Broken bikes are uncommon:** about 0.02-0.06 per station-poll in a normal
   week, 0.08-0.11 in a high-failure week.
-- **Rebalancing:** 70% of rush-hour stockouts and fullouts get a van in a
-  normal week (25% in a high-failure week); the van resets the station to
-  roughly half full when it arrives.
+- **Rebalancing during the day:** 70% of rush-hour stockouts and fullouts get
+  a van in a normal week (25% in a high-failure week); the van resets the
+  station to roughly half full when it arrives.
+- **Overnight rebalancing (11 PM-5 AM):** riders barely move bikes, and vans
+  gradually redistribute them so each station starts the next morning at a
+  realistic level (details below).
+
+## Commuter flow and overnight rebalancing
+
+Each station's fill level (bikes ÷ effective capacity) follows a target curve
+plus ordinary random wobble. The target depends on the time of day:
+
+| Time | Who moves the bikes | Residential (South Boston, Jamaica Plain, Charlestown) | Downtown and Back Bay | Fenway (mixed) |
+|---|---|---|---|---|
+| **Morning rush, 7-9 AM** | riders going INTO the city | drain: about 74% → 5-12% | fill: about 32% → 85-97% | rises a little |
+| **Midday** | riders, light | slowly refill to about 35% | stay high (about 80%) | about 60% |
+| **Evening rush, 4-6 PM** | riders going HOME, away from the city | refill to about 90% | drain to about 6% | dips to about 35% |
+| **Evening, 6-11 PM** | riders, light | hold the evening end state (about 93%) | hold it (about 7%) | about 38% |
+| **Overnight, 11 PM-5 AM** | **vans**, not riders | stepped down to the morning start (about 74%) | stepped up to the morning start (about 32%) | stepped to about 50% |
+
+Weekends have no commuter rush: residential stations drain and the others fill
+in daylight (about 10 AM-5 PM), and the overnight steps are small.
+
+How the overnight rebalancing works (`night_plan` and `overnight_order` in the generator):
+
+- **Riders almost stop.** Random rider wobble overnight is about 1/20 of the
+  rush-hour level (validation: about 0.03 bikes moved per poll at night versus
+  0.6 at rush hour, excluding the van visits).
+- **Vans visit every station 2-4 times a night.** The night is cut into as many
+  equal slices as there are visits, and one visit falls at a random time inside
+  each slice, so the work is spread from 11 PM to 5 AM rather than done at once.
+- **Each visit moves an equal share** of the gap between that evening's end
+  state and the next morning's start, so the level steps gradually (normal
+  week, residential: 88% at 10 PM, 81% at 1 AM, 75% at 4 AM; downtown: 14% at
+  10 PM to 32% at 4 AM). A visit that removes bikes is an `overnight_pickup`
+  work order and one that adds bikes is an `overnight_dropoff`; about 1.2 bikes
+  move per visit. If a visit's share rounds to 0 bikes (common on weekend
+  nights, when the two levels are close), no order is written.
+- **Out-of-service stations are skipped** that night and keep their level.
+- **The first night** (before Monday 5 AM of week 1) starts at the morning level.
+- Overnight runs are **scheduled work**, not responses to a call, so they are
+  left out of the FMEA "slow van response" rate and the dispatch
+  time-to-resolution figures.
+
+Assumptions, stated plainly: the network-wide bike total is not held exactly
+constant (each station is modelled on its own, so vans can be thought of as
+drawing on a depot float); vans have enough capacity overnight; the morning
+start and evening end levels are design choices for a plausible commuter city,
+not measured from real Boston data.
+
+Every row keeps the dock identity, so `num_bikes_available + num_docks_disabled`
+never exceeds `total_docks` (checked by `scripts/validate_data.py`).
 
 ## Files and columns
 
@@ -90,7 +139,7 @@ A dock not listed at a given time is `working`.
 | `order_id` | ticket number | text |
 | `station_id` | station code | text |
 | `order_type` | `repair` or `rebalance` | text |
-| `fault` | repair: `dock_fault`, `offline`, `broken_kiosk`, `silent_feed`, `maintenance`; rebalance: `stockout` (bring bikes) or `fullout` (take bikes) | text |
+| `fault` | repair: `dock_fault`, `offline`, `broken_kiosk`, `silent_feed`, `maintenance`; rebalance: `stockout` (bring bikes) or `fullout` (take bikes) during the day, or `overnight_pickup` / `overnight_dropoff` for the scheduled overnight runs | text |
 | `opened_at` | ticket opened (fault detected) | `YYYY-MM-DD HH:MM` |
 | `assigned_at` | van assigned | `YYYY-MM-DD HH:MM` |
 | `arrived_at` | van arrived at the station | `YYYY-MM-DD HH:MM` |
