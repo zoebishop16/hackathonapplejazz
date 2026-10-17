@@ -16,9 +16,7 @@ const PAGES = [
 // old page links land on the page that now holds them
 const PAGE_ALIASES = { stockouts: "map", docks: "maintenance", forecast: "dispatch", reliability: "analysis" };
 const CATS = ["empty", "low", "medium", "high", "full", "out_of_service"];
-const CAT_LABEL = { empty: "Empty station (0%)", low: "Low (1-29%)", medium: "Medium (30-69%)", high: "High (70-99%)", full: "Station full (100%)", out_of_service: "Out of service" };
-// short names for a station's problem (Dispatch "Problem" column)
-const PROBLEM_NAME = { empty: "Empty station", full: "Station full", out_of_service: "Out of service" };
+const CAT_LABEL = { empty: "Empty (0%)", low: "Low (1-29%)", medium: "Medium (30-69%)", high: "High (70-99%)", full: "Full (100%)", out_of_service: "Out of service" };
 const CAT_COLOR = { empty: "var(--empty)", low: "var(--low)", medium: "var(--medium)", high: "var(--high)", full: "var(--full)", out_of_service: "var(--oos)" };
 const STATUS_LABEL = { active: "Active", offline: "Offline", broken_kiosk: "Broken kiosk", blocked: "Blocked", maintenance: "Under maintenance" };
 const PROBLEM_LABEL = {
@@ -138,19 +136,19 @@ function render() {
   renderTop();
   const el = $("#page");
   if (S.error) {
-    el.innerHTML = `<div class="card state error" role="alert"><p><b>Couldn't load the station data.</b></p><p>Check your internet connection, then select Try again. If it keeps failing, reload the page.</p><button class="primary" id="retry">Try again</button><p class="small muted" style="margin-top:12px">Details: ${esc(S.error)}</p></div>`;
+    el.innerHTML = `<div class="card state error" role="alert"><p><b>Could not load data.</b></p><p>${esc(S.error)}</p><button class="primary" id="retry">Retry</button></div>`;
     $("#retry").onclick = () => loadDataset(S.datasetId);
     return;
   }
   if (S.loading || !S.data) {
-    el.innerHTML = `<div class="card state" aria-busy="true"><div class="spinner"></div>Loading station data… This takes a few seconds.</div>`;
+    el.innerHTML = `<div class="card state" aria-busy="true"><div class="spinner"></div>Loading station data...</div>`;
     return;
   }
   try {
     ({ overview: pageOverview, map: pageMapAll, dispatch: pageDispatchAll, maintenance: pageMaintenanceAll, analysis: pageAnalysis })[S.page](el);
   } catch (err) {
     console.error(err);
-    el.innerHTML = `<div class="card state error" role="alert"><p><b>This page couldn't be shown.</b></p><p>Reload the page, or pick a different dataset or snapshot in the top bar.</p><p class="small muted mono">Details: ${esc(err.message)}</p></div>`;
+    el.innerHTML = `<div class="card state error" role="alert"><p><b>This page failed to draw.</b></p><p class="mono">${esc(err.message)}</p></div>`;
   }
 }
 
@@ -207,8 +205,8 @@ function timeUntil(i) {
   return i.urgency === 5 || i.minutes_to_hit === 0 ? "Now" : hLabel(i.minutes_to_hit);
 }
 function riskBadge(i) {
-  if (PROBLEM_NAME[i.risk]) return `<span class="badge">${markerSvg(i.risk, 5)}${PROBLEM_NAME[i.risk]}</span>`;
-  return i.issues && i.issues.length ? `<span class="badge warn">${esc(i.issues.map(plainIssue).join(" · "))}</span>` : `<span class="muted small">—</span>`;
+  if (i.risk === "empty" || i.risk === "full" || i.risk === "out_of_service") return catBadge(i.risk);
+  return i.issues && i.issues.length ? `<span class="badge warn">${esc(i.issues.join(" · "))}</span>` : `<span class="muted small">—</span>`;
 }
 // Rebalancing tasks still open at this snapshot: van jobs in progress plus the
 // recommended and manual tasks assigned in this browser and not yet confirmed.
@@ -231,15 +229,6 @@ function openOnMap(id) {
 }
 
 // ----------------------------------------------------------------- Overview
-// Plain-language wording for the Overview (labels only; the data is unchanged)
-function plainIssue(t) {
-  return ({ "Empty now": "Empty station now", "Full now": "Station full now",
-    "Will be empty": "Empty station soon", "Will be full": "Station full soon" })[t] || t;
-}
-// FMEA mode names in plain words, for the Overview card only (the FMEA table keeps its names)
-const PLAIN_MODE = { "Station empty": "Empty stations", "Station full": "Stations full", "Docks disabled": "Broken docks",
-  "Silent feed": "Stations not reporting", "Kiosk offline": "Kiosks offline", "Slow van response": "Slow van response" };
-
 function pageOverview(el) {
   const snap = snapData();
   const sm = snap.summary;
@@ -251,29 +240,29 @@ function pageOverview(el) {
   const card = (href, title, line, value) => `<a class="page-card" href="${href}"><div><div class="pc-title">${title}</div><div class="pc-line">${line}</div></div><div class="pc-num">${value}</div><span class="pc-arrow" aria-hidden="true">→</span></a>`;
   el.innerHTML = `<div class="stack overview">
     <div class="grid cols-4 ov-strip">
-      ${stat(sm.empty, "empty stations now<br><span>0 bikes to rent</span>", CAT_COLOR.empty)}
-      ${stat(sm.full, "stations full now<br><span>0 open docks</span>", CAT_COLOR.full)}
-      ${stat(sm.out_of_service, "stations out of service now", CAT_COLOR.out_of_service)}
-      ${stat(sm.docks_available_pct === null ? "—" : `${fmt(sm.docks_available_pct, 0)}%`, `of total docks available<br><span>${sm.docks_available} of ${sm.docks_total} docks</span>`, CAT_COLOR.medium)}
+      ${stat(sm.empty, "empty stations now<br><span>no rentable bikes</span>", CAT_COLOR.empty)}
+      ${stat(sm.full, "full stations now<br><span>no open docks</span>", CAT_COLOR.full)}
+      ${stat(sm.out_of_service, "out-of-service stations now", CAT_COLOR.out_of_service)}
+      ${stat(sm.docks_available_pct === null ? "—" : `${fmt(sm.docks_available_pct, 0)}%`, `of docks available<br><span>${sm.docks_available} of ${sm.docks_total}, network-wide</span>`, CAT_COLOR.medium)}
     </div>
     <div class="card ov-risk">
-      <div class="card-h"><h2>Stations at risk<span class="subhead">Most urgent first. Select a station to see it on the map.</span></h2><a href="#dispatch" class="small">See all ${atRisk.length} on Dispatch →</a></div>
+      <div class="card-h"><h2>Stations at risk<span class="subhead">Top 5, in the same order as Dispatch · click a row to see it on the map</span></h2><a href="#dispatch" class="small">View all ${atRisk.length} →</a></div>
       ${top.length ? `<div class="table-wrap" style="max-height:none"><table class="forecast"><thead><tr><th>Station</th><th>Issue</th><th class="num">Risk %</th><th>Time until event</th></tr></thead><tbody>
-        ${top.map((i) => `<tr class="${i.priority === "high" ? "risk-high" : "risk"} clickable" tabindex="0" role="link" data-open="${i.id}" aria-label="See ${esc(stName(i.id))} on the map">
+        ${top.map((i) => `<tr class="${i.priority === "high" ? "risk-high" : "risk"} clickable" tabindex="0" role="link" data-open="${i.id}" aria-label="Open ${esc(stName(i.id))} on the map">
           <td><b>${esc(stName(i.id))}</b><div class="small muted">${esc(stationInfo(i.id).district)}</div></td>
-          <td><span class="row" style="gap:6px;flex-wrap:nowrap">${issueIcon(i)}${esc(i.issues.map(plainIssue).join(" · "))}</span></td>
+          <td><span class="row" style="gap:6px;flex-wrap:nowrap">${issueIcon(i)}${esc(i.issues.join(" · "))}</span></td>
           <td class="num"><b>${i.risk_pct === null ? "—" : `${fmt(i.risk_pct, 0)}%`}</b></td>
           <td>${timeUntil(i)}</td></tr>`).join("")}
       </tbody></table></div>
-      <p class="howto" style="margin:8px 14px 12px">Red rows are high priority. Risk % is how often this station had a problem at this day and time in past weeks (100% if it has one now).</p>`
-      : `<div class="state"><p><b>No stations at risk right now.</b></p><p class="small">Every station has bikes and open docks. Check again after the next update, or open the <a href="#map">Map</a> to see all stations.</p></div>`}
+      <p class="howto" style="margin:8px 14px 12px">Risk % = how often the station was empty, full or out of service in the next 2 hours at this weekday and time in earlier weeks (100% when it already is). Red rows are high priority.</p>`
+      : `<div class="state">No stations at risk right now.</div>`}
     </div>
     <div class="grid ov-cards">
       ${card("#map", "Map", "stations empty or full now", sm.empty + sm.full)}
-      ${card("#dispatch", "Dispatch", "bike moves still open", openRebalanceTasks())}
+      ${card("#dispatch", "Dispatch", "open rebalancing tasks", openRebalanceTasks())}
       ${card("#maintenance", "Dock Health", "stations with broken docks", sm.broken_dock_stations)}
-      ${card("#maintenance", "Maintenance", "average time to fix a fault", snap.maintenance.mttr_min === null ? "—" : dur(snap.maintenance.mttr_min))}
-      ${card("#analysis", "Data Analysis", "biggest risk to fix first", tf ? `${esc(PLAIN_MODE[tf.mode] || tf.mode)} <small>score ${tf.rpn}</small>` : "—")}
+      ${card("#maintenance", "Maintenance", "mean time to repair", snap.maintenance.mttr_min === null ? "—" : dur(snap.maintenance.mttr_min))}
+      ${card("#analysis", "Data Analysis", "top failure mode (FMEA)", tf ? `${esc(tf.mode)} <small>RPN ${tf.rpn}</small>` : "—")}
     </div>
   </div>`;
   el.querySelectorAll("[data-open]").forEach((tr) => {
@@ -491,7 +480,7 @@ function pageMaintenanceAll(el) {
 
 // ------------------------------------------------- Dispatch (with Forecast)
 const HORIZONS = [30, 60, 90, 120];
-const hLabel = (m) => (m === 0 ? "Now" : m < 60 ? `Within ${m} min` : `Within ${m / 60} hour${m === 60 ? "" : "s"}`);
+const hLabel = (m) => (m === 0 ? "Now" : m < 60 ? `≤ ${m} min` : `≤ ${m / 60} h`);
 function saveLocal() { store.set("local", S.local); }
 function localKey(id) { return `${S.datasetId}|${S.snap}|${id}`; }
 function kmBetween(a, b) {
@@ -518,16 +507,9 @@ function vanChoices(pickupId, bikes, busy) {
 }
 function vanSelect(attr, choices) {
   const ok = choices.filter((c) => c.ok);
-  if (!ok.length) return `<span class="badge bad">No free van with room right now</span>`;
-  return `<select ${attr} aria-label="Van">${ok.map((c, i) => `<option value="${c.v.van}" ${i === 0 ? "selected" : ""}>${esc(c.v.name)} · ${fmt(c.km, 1)} km away · room for ${c.room} bikes${i === 0 ? " (closest)" : ""}</option>`).join("")}</select>`;
+  if (!ok.length) return `<span class="badge bad">No van available</span>`;
+  return `<select ${attr} aria-label="Van">${ok.map((c, i) => `<option value="${c.v.van}" ${i === 0 ? "selected" : ""}>${esc(c.v.name)} · ${fmt(c.km, 1)} km away · room ${c.room}${i === 0 ? " (suggested)" : ""}</option>`).join("")}</select>`;
 }
-
-// plain names shown on the Dispatch page (the data keeps its codes)
-const FAULT_TEXT = { dock_fault: "Broken dock", offline: "Station offline", broken_kiosk: "Broken kiosk",
-  silent_feed: "Station stopped reporting", maintenance: "Scheduled maintenance", stockout: "Empty station (bring bikes)",
-  fullout: "Station full (take bikes away)", overnight_pickup: "Overnight run (take bikes away)", overnight_dropoff: "Overnight run (bring bikes)" };
-const VAN_TEXT = { idle: "Available", "en route": "Driving to a station", "on site": "At a station" };
-function vanName(id) { const v = snapData().vans.find((x) => x.van === id); return v ? v.name : id; }
 
 function pageDispatchAll(el) {
   const snap = snapData();
@@ -536,9 +518,9 @@ function pageDispatchAll(el) {
   const check = (i) => {
     const act = actualAt(i);
     if (!i.risk || !act) return "—";
-    return act === i.risk ? `<span class="badge ok">✓ Yes</span>` : `<span class="badge">✗ ${({ ok: "No (stayed OK)", empty: "No (was an empty station)", full: "No (was station full)" })[act] || "No"}</span>`;
+    return act === i.risk ? `<span class="badge ok">✓ happened</span>` : `<span class="badge">✗ was ${esc(act)}</span>`;
   };
-  const PRI = { high: ["High", "bad"], medium: ["Medium", "warn"], low: ["Low", ""], none: ["None", ""] };
+  const PRI = { high: ["High", "bad"], medium: ["Medium", "warn"], low: ["Low", ""], none: ["—", ""] };
 
   const orders = Object.fromEntries(S.data.orders.map((o) => [o.id, o]));
   const vans = snap.vans;
@@ -547,14 +529,14 @@ function pageDispatchAll(el) {
     const key = localKey(`move${k}`);
     const assigned = S.local.assigned[key];
     return `<div class="move">
-      <div class="row" style="justify-content:space-between"><b>${m.bikes} bikes</b><span class="small muted">${fmt(m.km, 1)} km apart</span></div>
-      <div class="row small"><span class="badge">${markerSvg("full", 5)} Take from</span>${esc(stName(m.from))}</div>
-      <div class="row small"><span class="badge">${markerSvg("empty", 5)} Bring to</span>${esc(stName(m.to))}</div>
-      <div class="small muted">Why: ${esc(stName(m.from))} is expected to be nearly full within the hour, and ${esc(stName(m.to))} nearly empty.</div>
-      <div class="row">${assigned ? `<span class="badge ok">Assigned to ${esc(vanName(assigned))}</span><button data-unassign="${key}">Unassign</button>` :
-        `${vanSelect(`data-van="${key}"`, vanChoices(m.from, m.bikes, busy))}${vanChoices(m.from, m.bikes, busy).some((c) => c.ok) ? `<button class="primary" data-assign="${key}">Assign van</button>` : ""}`}</div>
+      <div class="row" style="justify-content:space-between"><b>${m.bikes} bikes</b><span class="small muted">${fmt(m.km, 1)} km</span></div>
+      <div class="row small"><span class="badge">${markerSvg("full", 5)} Pick up</span>${esc(stName(m.from))}</div>
+      <div class="row small"><span class="badge">${markerSvg("empty", 5)} Drop off</span>${esc(stName(m.to))}</div>
+      <div class="small muted">${esc(m.reason)}</div>
+      <div class="row">${assigned ? `<span class="badge ok">Assigned to ${esc(assigned)}</span><button data-unassign="${key}">Undo</button>` :
+        `${vanSelect(`data-van="${key}"`, vanChoices(m.from, m.bikes, busy))}${vanChoices(m.from, m.bikes, busy).some((c) => c.ok) ? `<button class="primary" data-assign="${key}">Assign</button>` : ""}`}</div>
     </div>`;
-  }).join("") || `<p class="muted">No bike moves needed right now. No station is expected to be nearly empty or nearly full in the next hour.</p>`;
+  }).join("") || `<p class="muted">No moves needed: no station is projected far enough above or below half full.</p>`;
 
   // manual rebalancing form
   const active = snap.stations.filter((r) => r.status === "active");
@@ -565,87 +547,83 @@ function pageDispatchAll(el) {
   const maxBikes = Math.max(0, Math.min(fromRow ? fromRow.bikes_available : 0, toRow ? toRow.docks_available : 0));
   const formChoices = D.from ? vanChoices(D.from, D.bikes, busy) : [];
   const problems = [];
-  if (D.from && D.from === D.to) problems.push("Pick a different station to bring bikes to.");
-  if (fromRow && D.bikes > fromRow.bikes_available) problems.push(fromRow.bikes_available === 0
-    ? `${stName(D.from)} has no bikes to take. Pick another station to take bikes from.`
-    : `${stName(D.from)} has only ${fromRow.bikes_available} bikes to take. Lower the number or pick another station.`);
-  if (toRow && D.bikes > toRow.docks_available) problems.push(toRow.docks_available === 0
-    ? `${stName(D.to)} is full right now. Pick another station to bring bikes to.`
-    : `${stName(D.to)} has room for only ${toRow.docks_available} bikes. Lower the number or pick another station.`);
-  if (!(D.bikes >= 1)) problems.push("Enter 1 or more bikes.");
-  if (!formChoices.some((c) => c.ok)) problems.push("No free van has room for that many bikes. Lower the number, or mark a job as done to free a van.");
+  if (D.from && D.from === D.to) problems.push("pick-up and drop-off must be different stations");
+  if (fromRow && D.bikes > fromRow.bikes_available) problems.push(`${D.from} has only ${fromRow.bikes_available} rentable bikes`);
+  if (toRow && D.bikes > toRow.docks_available) problems.push(`${D.to} has only ${toRow.docks_available} open docks`);
+  if (!(D.bikes >= 1)) problems.push("move at least 1 bike");
+  if (!formChoices.some((c) => c.ok)) problems.push("no van is free with enough room");
   const stOpt = (sel, fn) => active.map((r) => `<option value="${r.id}" ${r.id === sel ? "selected" : ""}>${esc(stName(r.id))} · ${fn(r)}</option>`).join("");
-  const form = `<div class="card"><div class="card-h"><h2>Move bikes between stations</h2><span class="small muted">Only free vans with room are listed, closest first.</span></div>
+  const form = `<div class="card"><div class="card-h"><h2>Create a rebalancing task</h2><span class="small muted">vans offered: idle, not already assigned, with room for the bikes; nearest first</span></div>
     <div class="card-b manual-form">
-      <label>Take bikes from<select id="mf-from">${stOpt(D.from, (r) => `${r.bikes_available} bikes to take`)}</select></label>
-      <label>Bring bikes to<select id="mf-to">${stOpt(D.to, (r) => `room for ${r.docks_available} bikes`)}</select></label>
-      <label>Number of bikes<input type="number" id="mf-bikes" min="1" max="${Math.max(1, maxBikes)}" value="${D.bikes}"></label>
+      <label>Pick-up station<select id="mf-from">${stOpt(D.from, (r) => `${r.bikes_available} bikes`)}</select></label>
+      <label>Drop-off station<select id="mf-to">${stOpt(D.to, (r) => `${r.docks_available} open docks`)}</select></label>
+      <label>Bikes<input type="number" id="mf-bikes" min="1" max="${Math.max(1, maxBikes)}" value="${D.bikes}"></label>
       <label>Van${vanSelect('id="mf-van"', formChoices)}</label>
-      <button class="primary" id="mf-create" ${problems.length ? "disabled" : ""}>Add bike move</button>
-      ${problems.length ? `<p class="small" style="color:#a51d16;grid-column:1/-1;margin:0">Can't add this move yet. ${esc(problems.join(" "))}</p>` : `<p class="small muted" style="grid-column:1/-1;margin:0">You can move up to ${maxBikes} bikes: what ${esc(stName(D.from))} has and what ${esc(stName(D.to))} can hold.</p>`}
+      <button class="primary" id="mf-create" ${problems.length ? "disabled" : ""}>Create task</button>
+      ${problems.length ? `<p class="small" style="color:#a51d16;grid-column:1/-1;margin:0">Can't create yet: ${esc(problems.join("; "))}.</p>` : `<p class="small muted" style="grid-column:1/-1;margin:0">Up to ${maxBikes} bikes fit (rentable bikes at the pick-up and open docks at the drop-off).</p>`}
     </div></div>`;
 
   const repairTasks = snap.tasks.repair.map((id) => orders[id]);
   const rebalTasks = snap.tasks.rebalance.map((id) => orders[id]);
   const assignedMoves = snap.moves.map((m, k) => ({ m, key: localKey(`move${k}`) })).filter((x) => S.local.assigned[x.key]);
-  const doneBtn = (key) => (S.local.done[key] ? `<span class="badge ok">Done</span> <button data-undone="${key}">Undo</button>` : `<button data-done="${key}">Mark as done</button>`);
+  const doneBtn = (key) => (S.local.done[key] ? `<span class="badge ok">Completed (confirmed)</span> <button data-undone="${key}">Undo</button>` : `<button data-done="${key}">Confirm complete</button>`);
   const taskCard = (o) => {
     const key = localKey(o.id);
-    const status = o.arrived <= snap.time ? "Van at the station" : o.assigned <= snap.time ? "Van on the way" : "Waiting for a van";
+    const status = o.arrived <= snap.time ? "on site" : o.assigned <= snap.time ? "en route" : "open";
     return `<div class="task ${S.local.done[key] ? "done" : ""}"><div class="row" style="justify-content:space-between"><b>${esc(o.id)} · ${esc(stName(o.station))}</b><span class="badge">${status}</span></div>
-      <div class="small muted">${esc(FAULT_TEXT[o.fault] || o.fault.replace(/_/g, " "))} · reported ${esc(o.opened.slice(11))} · ${esc(vanName(o.van))}${o.bikes_moved ? ` · ${o.bikes_moved} bikes` : ""} · open for ${dur(minsBetween(o.opened, snap.time))}</div>
+      <div class="small muted">${esc(o.fault.replace(/_/g, " "))} · opened ${esc(o.opened.slice(11))} · ${esc(o.van)}${o.bikes_moved ? ` · ${o.bikes_moved} bikes` : ""} · open ${dur(minsBetween(o.opened, snap.time))}</div>
       <div>${doneBtn(key)}</div></div>`;
   };
-  const localCard = (title, sub, key, van) => `<div class="task ${S.local.done[key] ? "done" : ""}"><div class="row" style="justify-content:space-between"><b>${title}</b><span class="badge">${esc(vanName(van))}</span></div>
+  const localCard = (title, sub, key, van) => `<div class="task ${S.local.done[key] ? "done" : ""}"><div class="row" style="justify-content:space-between"><b>${title}</b><span class="badge">${esc(van)}</span></div>
       <div class="small muted">${sub}</div><div>${doneBtn(key)}</div></div>`;
   const rebalCount = rebalTasks.length + assignedMoves.length + manualTasks().length;
   const queue = S.queueTab === "repair"
-    ? repairTasks.map(taskCard).join("") || `<p class="muted">No repairs waiting. New repair jobs appear here when a dock or kiosk breaks.</p>`
+    ? repairTasks.map(taskCard).join("") || `<p class="muted">No open repair tasks.</p>`
     : (rebalTasks.map(taskCard).join("")
-      + assignedMoves.map(({ m, key }) => localCard(`Move ${m.bikes} bikes ${esc(m.from)} → ${esc(m.to)}`, `Suggested move · ${fmt(m.km, 1)} km`, key, S.local.assigned[key])).join("")
-      + manualTasks().map((t) => localCard(`Move ${t.bikes} bikes ${esc(t.from)} → ${esc(t.to)}`, `Added by you · ${fmt(t.km, 1)} km`, localKey(t.id), t.van)).join(""))
-      || `<p class="muted">No bike moves in progress. Assign a suggested move or add one above.</p>`;
+      + assignedMoves.map(({ m, key }) => localCard(`Move ${m.bikes} bikes ${esc(m.from)} → ${esc(m.to)}`, `recommended move · ${fmt(m.km, 1)} km`, key, S.local.assigned[key])).join("")
+      + manualTasks().map((t) => localCard(`Move ${t.bikes} bikes ${esc(t.from)} → ${esc(t.to)}`, `manual task · ${fmt(t.km, 1)} km`, localKey(t.id), t.van)).join(""))
+      || `<p class="muted">No open rebalancing tasks.</p>`;
   const vanCards = vans.map((v) => {
-    const mine = [...assignedMoves.filter((x) => S.local.assigned[x.key] === v.van && !S.local.done[x.key]).map(() => "suggested move"),
+    const mine = [...assignedMoves.filter((x) => S.local.assigned[x.key] === v.van && !S.local.done[x.key]).map(() => "new move"),
       ...manualTasks().filter((t) => t.van === v.van && !S.local.done[localKey(t.id)]).map((t) => t.id)];
     const free = v.status === "idle" && !busy.has(v.van);
-    return `<div class="task"><div class="row" style="justify-content:space-between"><b>${esc(v.name)}</b><span class="badge ${free ? "ok" : "warn"}">${free ? "Available" : busy.has(v.van) && v.status === "idle" ? "Has a job" : VAN_TEXT[v.status] || esc(v.status)}</span></div>
-      <div class="small muted">${v.station === "depot" ? "At the depot" : `${v.status === "en route" ? "Heading to" : "At"} ${esc(stName(v.station))}`}</div>
-      <div class="small">Carrying ${v.load} of ${v.capacity} bikes</div><div class="loadbar" aria-hidden="true"><div style="width:${(100 * v.load) / v.capacity}%"></div></div>
-      <div class="small muted">Jobs: ${[...v.queue, ...mine].join(", ") || "none"}</div></div>`;
+    return `<div class="task"><div class="row" style="justify-content:space-between"><b>${esc(v.name)}</b><span class="badge ${free ? "ok" : "warn"}">${free ? "available" : busy.has(v.van) && v.status === "idle" ? "assigned" : esc(v.status)}</span></div>
+      <div class="small muted">${v.station === "depot" ? "At depot" : `At / heading to ${esc(stName(v.station))}`}</div>
+      <div class="small">Load ${v.load} / ${v.capacity} bikes</div><div class="loadbar" aria-hidden="true"><div style="width:${(100 * v.load) / v.capacity}%"></div></div>
+      <div class="small muted">Queue: ${[...v.queue, ...mine].join(", ") || "empty"}</div></div>`;
   }).join("");
   const res = snap.resolution;
   const nFree = vans.filter((v) => v.status === "idle" && !busy.has(v.van)).length;
 
   el.innerHTML = `<div class="stack">
     <div class="card">
-      <div class="card-h"><h2>Stations at risk in the next 2 hours<span class="subhead">Most urgent first, then the most bikes affected</span></h2>
-        <div class="legend"><span class="item"><span class="swatch risk-high"></span>High priority: problem now or within 30 minutes</span><span class="item"><span class="swatch risk"></span>At risk within 2 hours</span></div></div>
-      <div class="table-wrap"><table class="forecast"><thead><tr><th class="num">Rank</th><th>Station</th><th>Priority</th><th>Problem</th><th>Starts</th><th class="num">Bikes now / usable docks</th>${HORIZONS.map((m) => `<th class="num">Bikes in ${m < 60 ? `${m} min` : `${m / 60} h`}</th>`).join("")}<th class="num">Bikes affected</th><th>Did it happen?</th></tr></thead>
+      <div class="card-h"><h2>Forecast & at-risk stations<span class="subhead">Ranked by priority, then expected impact</span></h2>
+        <div class="legend"><span class="item"><span class="swatch risk-high"></span>High priority (now or ≤ 30 min)</span><span class="item"><span class="swatch risk"></span>At risk within 2 h</span></div></div>
+      <div class="table-wrap"><table class="forecast"><thead><tr><th class="num">Rank</th><th>Station</th><th>Priority</th><th>Risk</th><th>When</th><th class="num">Bikes now / eff.</th>${HORIZONS.map((m) => `<th class="num">+${m < 60 ? `${m} min` : `${m / 60} h`}</th>`).join("")}<th class="num">Impact (bikes)</th><th>Check</th></tr></thead>
       <tbody>${fc.map((i) => `<tr class="${i.priority === "high" ? "risk-high" : i.urgency > 0 ? "risk" : ""}"><td class="num">${i.rank}</td><td>${esc(stName(i.id))}<div class="small muted">${esc(stationInfo(i.id).district)}</div></td>
         <td><span class="badge ${PRI[i.priority][1]}">${PRI[i.priority][0]}</span></td><td>${riskBadge(i)}</td><td>${timeUntil(i)}</td><td class="num">${i.bikes} / ${i.eff}</td>
         ${HORIZONS.map((m) => `<td class="num ${i[`risk${m}`] ? "hit" : ""}">${fmt(i[`p${m}`], 1)}</td>`).join("")}<td class="num">${fmt(i.impact_bikes, 1)}</td><td>${check(i)}</td></tr>`).join("")}
       </tbody></table></div>
       <div class="card-b">
-        <div class="formula">How the forecast works: expected bikes = bikes now + the usual change at this day and time × usable docks. Checked at 30 min, 1 h, 1.5 h and 2 h.</div>
-        <p class="howto">The "usual change" comes from the same day and time in earlier weeks. A station is at risk when it is expected to come within 10% of being an empty station or station full; those numbers are in bold red. Rows are sorted by how soon the problem starts, then by how many bikes are affected.</p>
+        <div class="formula">projected bikes(+m) = bikes now + [avg fill at this weekday & time +m − avg fill now] × effective capacity, for m = 30 min, 1 h, 1.5 h, 2 h</div>
+        <p class="howto">Averages come from the same weekday and time (±10 min) in earlier weeks only. A station is at risk when a projection comes within 10% of capacity (at least 1 bike) of empty or full; bold red projections are the ones that trigger it. Rank = priority (sooner first), then impact: how many bikes the average flow moves by then.</p>
       </div>
     </div>
     <div class="grid cols-4">
-      <div class="card kpi kpi-blue"><div class="v">${snap.moves.length}</div><div class="l">suggested bike moves</div></div>
-      <div class="card kpi kpi-blue"><div class="v">${repairTasks.length + openRebalanceTasks()}</div><div class="l">open jobs (${repairTasks.length} repair${repairTasks.length === 1 ? "" : "s"} · ${openRebalanceTasks()} bike move${openRebalanceTasks() === 1 ? "" : "s"})</div></div>
+      <div class="card kpi kpi-blue"><div class="v">${snap.moves.length}</div><div class="l">recommended moves</div></div>
+      <div class="card kpi kpi-blue"><div class="v">${repairTasks.length + openRebalanceTasks()}</div><div class="l">open tasks (${repairTasks.length} repair · ${openRebalanceTasks()} rebalancing)</div></div>
       <div class="card kpi kpi-blue"><div class="v">${nFree} / ${vans.length}</div><div class="l">vans available now</div></div>
-      <div class="card kpi kpi-blue"><div class="v">${res.rebalance.median_min === null ? "—" : dur(res.rebalance.median_min)}</div><div class="l">typical time to finish a bike move (from ${res.rebalance.n} finished moves)</div></div>
+      <div class="card kpi kpi-blue"><div class="v">${res.rebalance.median_min === null ? "—" : dur(res.rebalance.median_min)}</div><div class="l">median time to resolve a rebalance call (${res.rebalance.n} done)</div></div>
     </div>
     ${form}
     <div class="grid dispatch">
-      <div class="card"><div class="card-h"><h2>Suggested bike moves</h2></div><div class="card-b">${moveCards}
-        <p class="howto">Suggested when a station is expected to be more than 80% or less than 20% full in an hour. Each move takes bikes from the closest station that has spare ones, brings both back toward half full, and carries at most 16 bikes.</p></div></div>
-      <div class="card"><div class="card-h"><h2>Jobs in progress</h2></div>
-        <div class="tabs" role="tablist"><button role="tab" aria-selected="${S.queueTab === "repair"}" data-qtab="repair">Repairs (${repairTasks.length})</button><button role="tab" aria-selected="${S.queueTab === "rebalance"}" data-qtab="rebalance">Bike moves (${rebalCount})</button></div>
+      <div class="card"><div class="card-h"><h2>Recommended pickup → drop-off</h2></div><div class="card-b">${moveCards}
+        <p class="howto">Stations projected above 80% full in an hour give bikes down to half full; stations projected below 20% get bikes up to half full, from the nearest donor first (at most 16 bikes a trip). Only available vans are offered, nearest to the pick-up first.</p></div></div>
+      <div class="card"><div class="card-h"><h2>Task queue</h2></div>
+        <div class="tabs" role="tablist"><button role="tab" aria-selected="${S.queueTab === "repair"}" data-qtab="repair">Repair (${repairTasks.length})</button><button role="tab" aria-selected="${S.queueTab === "rebalance"}" data-qtab="rebalance">Rebalancing (${rebalCount})</button></div>
         <div class="card-b list">${queue}</div></div>
-      <div class="card"><div class="card-h"><h2>Vans</h2></div><div class="card-b list">${vanCards}
-        <p class="howto">A van is available when it has no job. Assignments and "done" marks are saved only in this browser, so other people won't see them.</p></div></div>
+      <div class="card"><div class="card-h"><h2>Van status</h2></div><div class="card-b list">${vanCards}
+        <p class="howto">A van is available when it is idle and not already given a task here. Assignments, manual tasks and confirmations are saved in this browser only.</p></div></div>
     </div></div>`;
 
   el.querySelectorAll("[data-qtab]").forEach((b) => (b.onclick = () => { S.queueTab = b.dataset.qtab; render(); }));
