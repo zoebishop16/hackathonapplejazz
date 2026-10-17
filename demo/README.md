@@ -1,7 +1,11 @@
 # Demo: Dock Watch on every test dataset
 
-Start it with `python3 app/testme.py` and open http://localhost:8000, or use
-the live site https://zoebishop16.github.io/hackathonapplejazz/. Pick the
+Start it with `.venv/bin/python app/testme.py` and open
+http://localhost:8000/dashboard/ (the API docs are at http://localhost:8000/docs),
+or use the live site https://zoebishop16.github.io/hackathonapplejazz/.
+Every number below is also available from the API, for example
+`GET /datasets/normal_week__seed_1/xbar?scope=district:Northside` returns the
+Northside X̿ = 45.30 and σ_short = 10.52 from step 7. Pick the
 dataset and snapshot in the top bar. All numbers below are for the
 **Wed 08:15 (morning rush)** snapshot unless a step says otherwise.
 

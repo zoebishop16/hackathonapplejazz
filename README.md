@@ -1,6 +1,8 @@
-# Dock Watch: a bikeshare dock-availability and QC dashboard
+# Dock Watch: a bikeshare dock-availability QC REST API and dashboard
 
-**Live site:** https://zoebishop16.github.io/hackathonapplejazz/
+**REST API (FastAPI) on Posit Connect:** the link is added here after the first deploy (see [Deploy](#deploy)).
+Interactive docs at `/docs`, dashboard at `/dashboard/`.
+**Dashboard on GitHub Pages:** https://zoebishop16.github.io/hackathonapplejazz/
 **Prompt:** Urban Systems: Bikeshare Fleets (Cornell Six Sigma Hackathon, on-campus track)
 
 At rush hour a city bikeshare runs out of bikes in residential districts and
@@ -10,26 +12,56 @@ crew lead). It shows which stations are unusable, when and where, which dock
 counts are misleading, which stations will hit empty or full in the next hour,
 and which van should move bikes where. It also runs the quality-control
 analysis behind those calls: an FMEA, control charts and reliability models.
+Every result is available as a **public REST API**, and the `/compute/...`
+endpoints run the same tested statistics on your own numbers.
 
 All data is **synthetic**: 20 stations in 4 districts, polled every 5 minutes
 for 3 weeks ([codebook](data/README.md)).
 
 ## Run it (one command)
 
+Once, with Python 3.11:
+
 ```bash
-python3 app/testme.py
+python3.11 -m venv .venv && .venv/bin/pip install -r tests/requirements.txt
 ```
 
-Then open http://localhost:8000. Python 3.9+ and nothing else: the app is
-standard library only. It builds the JSON from `data/` and serves `app/site/`.
-
-Run the tests:
+Then:
 
 ```bash
-python3 -m pip install -r app/requirements.txt && python3 -m pytest tests -q && node tests/test_calc_js.mjs
+.venv/bin/python app/testme.py
+```
+
+Open http://localhost:8000/docs for the API (try any endpoint with **Try it
+out**) and http://localhost:8000/dashboard/ for the dashboard. Ctrl+C stops it.
+
+Run the tests (statistics, API and the browser calculator):
+
+```bash
+.venv/bin/python -m pytest tests -q && node tests/test_calc_js.mjs
 ```
 
 Rebuild the datasets (optional; they are committed): `python3 scripts/generate_data.py`.
+
+## The REST API
+
+Full endpoint list with example bodies: [`app/README.md`](app/README.md).
+
+| Kind | Endpoints |
+|---|---|
+| about | `GET /`, `GET /health`, `GET /docs` |
+| test datasets | `GET /datasets`, then `/datasets/{id}/` + `stations`, `stations/{station}`, `heatmap`, `events`, `forecast`, `dispatch`, `maintenance`, `xbar`, `imr`, `pchart`, `fmea`, `reliability` |
+| your own numbers | `POST /compute/` + `fill`, `stockouts`, `xbar`, `imr`, `pchart`, `fmea`, `reliability`, `availability`, `forecast` |
+
+Example: is a station's "full" real?
+
+```bash
+curl -X POST http://localhost:8000/compute/fill -H "content-type: application/json" \
+  -d '{"total_docks": 12, "docks_disabled": 4, "bikes_available": 6}'
+```
+
+returns effective capacity 8, fill 75% ("high"), naive fill 50%, and the flag
+`looks_emptier`: the 4 broken docks hide how full it really is.
 
 ## The seven pages
 
@@ -96,6 +128,19 @@ baseline is in control; reliability blocks fail independently (the station
 page shows the observed joint rate to check this); open tickets are left out
 of MTTR (no censoring correction) and counted as backlog.
 
+## Deploy
+
+- **Posit Connect (the API).** On every push, `.github/workflows/deploy-fastapi.yml`
+  checks the committed `app/manifest.json`, imports the app, uploads the bundle
+  and waits for `/health` to answer. It needs two repo secrets, `CONNECT_SERVER`
+  and `CONNECT_API_KEY` (handed out at the event; set them in Settings → Secrets
+  and variables → Actions, never in a file). From your machine instead:
+  `PYTHON=$PWD/.venv/bin/python bash app/deployme.sh`.
+- After changing anything in `app/` or `data/`, run `PYTHON=$PWD/.venv/bin/python bash app/manifestme.sh`
+  and commit `app/manifest.json` and `app/site/data/`.
+- **GitHub Pages (dashboard only).** `.github/workflows/pages.yml` tests, rebuilds
+  and publishes `app/site/` (Settings → Pages → Source: GitHub Actions).
+
 ## Demo
 
 [`demo/README.md`](demo/README.md) walks through every dataset with the
@@ -105,13 +150,16 @@ numbers you should see.
 
 ```
 app/qc.py            every statistic (standard library only)
+app/app.py           the FastAPI REST API (+ serves the dashboard)
 app/build.py         data/ -> app/site/data/*.json, calling qc.py
-app/testme.py        build + serve on localhost:8000
+app/testme.py        build + run the API on localhost:8000
+app/manifestme.sh, app/deployme.sh, app/manifest.json   Posit Connect deploy
 app/site/            the static dashboard (index.html, app.js, calc.js, styles.css)
 data/                4 synthetic datasets + codebook
 scripts/generate_data.py   the dataset generator (seeded)
 tests/               pytest + node tests
-.github/workflows/pages.yml  test, build and publish to GitHub Pages on every push
+.github/workflows/deploy-fastapi.yml  publish the API to Posit Connect on every push
+.github/workflows/pages.yml  test, build and publish the dashboard to GitHub Pages
 SPEC.md, CONTRACT.yaml, docs/plan.md   what we built and why
 ```
 
@@ -121,4 +169,4 @@ The hackathon's own pages (schedule, rubric, prompts) are in [`docs/`](docs/READ
 
 Built with Claude Code from the team's design document. Course methods from
 the SYSEN 5300 textbook, https://timothyfraser.com/sigma/. GBFS field names
-follow https://gbfs.org/. No external libraries in the app.
+follow https://gbfs.org/. The API uses FastAPI, uvicorn and pydantic; the statistics use only the Python standard library. The Connect workflow is adapted from timothyfraser/fastapi-connect-demo (MIT).

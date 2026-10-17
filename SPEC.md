@@ -45,8 +45,8 @@ Fixed for every team:
 - You can explain every number the tool prints. If you cannot, it is not done.
 
 ## 5. Delivery (rubric: working tool 25)
-- **Stack:** dashboard: Python (standard library only) computes every statistic into JSON; a static HTML/JS dashboard displays it, hosted on GitHub Pages.
-- **Starting demo:** none copied; a plain static site in `app/site/` (the team chose GitHub Pages over Posit Connect). `app/testme.py` builds and serves it with one command.
+- **Stack:** REST API (FastAPI). `app/app.py` exposes every statistic in `app/qc.py`: GET endpoints for the four test datasets and POST `/compute/...` endpoints that run the same functions on the user's own numbers. It also serves the dashboard at `/dashboard/` and interactive docs at `/docs`. Deployed on the course Posit Connect server; the static dashboard also runs on GitHub Pages.
+- **Starting demo:** `demos/fastapi/` (its four-script contract: `app/testme.sh`, `app/manifestme.sh`, `app/deployme.sh`, `app/README.md`; Python 3.11 in `app/.python-version`).
 
 Fixed for every team:
 - Start from **one** demo in `demos/`, copied to `app/`. Keep its four-script contract

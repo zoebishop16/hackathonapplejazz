@@ -1,0 +1,18 @@
+[
+ {
+  "id": "normal_week__seed_1",
+  "label": "normal week / seed 1"
+ },
+ {
+  "id": "normal_week__seed_2",
+  "label": "normal week / seed 2"
+ },
+ {
+  "id": "high_failure_week__seed_1",
+  "label": "high failure week / seed 1"
+ },
+ {
+  "id": "high_failure_week__seed_2",
+  "label": "high failure week / seed 2"
+ }
+]

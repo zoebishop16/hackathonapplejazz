@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "locale": "en_US.UTF-8",
+  "metadata": {
+    "appmode": "python-fastapi",
+    "entrypoint": "app:app"
+  },
+  "python": {
+    "version": "3.11.2",
+    "package_manager": {
+      "name": "pip",
+      "version": "26.2.1",
+      "package_file": "requirements.txt"
+    }
+  },
+  "environment": {
+    "python": {
+      "requires": "~=3.11.0"
+    }
+  },
+  "files": {
+    "requirements.txt": {
+      "checksum": "aa5da1c3587376d93273c05178e6828f"
+    },
+    ".python-version": {
+      "checksum": "c0479ff484dacd51dc5ba0461b16b9bf"
+    },
+    "README.md": {
+      "checksum": "6a01b7a29ead15896039c46d773e564e"
+    },
+    "app.py": {
+      "checksum": "a796a508c57796ed240b877bc6688cd1"
+    },
+    "qc.py": {
+      "checksum": "4af41f18f1af64ac1c2b92f68674af08"
+    },
+    "site/app.js": {
+      "checksum": "a19b7bfdf17fe3adbb0fd2319e6281c5"
+    },
+    "site/calc.js": {
+      "checksum": "0dbc225e31222b85d42b7b679782205b"
+    },
+    "site/data/high_failure_week__seed_1.json": {
+      "checksum": "5f33efda3ddd117a0d31f3423912ad09"
+    },
+    "site/data/high_failure_week__seed_2.json": {
+      "checksum": "815a4b75b3e784c6641a713e1da8a10a"
+    },
+    "site/data/index.json": {
+      "checksum": "03d688c1a5ee2b8018284f102cd0ecb3"
+    },
+    "site/data/normal_week__seed_1.json": {
+      "checksum": "8266c8a44a7ed04dc81b355f988c311c"
+    },
+    "site/data/normal_week__seed_2.json": {
+      "checksum": "10a9faa5660fe84284487d032e1016a8"
+    },
+    "site/index.html": {
+      "checksum": "9baa01abee60fa6466a6b06e3d27d1f4"
+    },
+    "site/package.json": {
+      "checksum": "07613765e9341a0662911bdef9f5bb2b"
+    },
+    "site/styles.css": {
+      "checksum": "3ab34950d0b5d10f34671ac0b1d9dc79"
+    }
+  }
+}

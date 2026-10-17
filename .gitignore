@@ -13,5 +13,6 @@ rsconnect/
 
 .claude/settings.local.json
 
-# built by app/build.py from data/ (CI rebuilds it)
-app/site/data/
+# local Python environment
+.venv/
+.DS_Store

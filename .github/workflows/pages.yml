@@ -29,11 +29,13 @@ jobs:
           node-version: "20"
       - name: Test the statistics
         run: |
-          pip install -r app/requirements.txt
+          pip install -r tests/requirements.txt
           pytest tests -q
           node tests/test_calc_js.mjs
-      - name: Build the dashboard data
-        run: python3 app/build.py
+      - name: Build the dashboard data (and check the committed JSON is current)
+        run: |
+          python3 app/build.py
+          git diff --exit-code --stat app/site/data || { echo "::error::app/site/data is stale: run app/manifestme.sh locally and commit"; exit 1; }
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

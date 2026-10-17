@@ -86,7 +86,7 @@ tasks:
       The testme script in app/ starts the tool with one command, and a call
       on one data/ file (endpoint, function call or app upload) returns the
       same numbers as the H-03 known-answer test.
-    result: "python3 app/testme.py builds JSON via qc.py and serves the 7-page dashboard on localhost:8000."
+    result: "FastAPI REST API (app/app.py) over qc.py plus the dashboard at /dashboard/; app/testme.py runs it on localhost:8000; 31 pytest pass incl. tests/test_api.py with the SPEC 4 answers."
 
   - id: H-05
     title: Demonstration of the tool on every test dataset
@@ -120,7 +120,7 @@ tasks:
     definition_of_done: >
       The workflow run is green, and the public URL answers HTTP 200 from a
       logged-out browser and returns the H-03 numbers for one test dataset.
-    result: "Replaced by GitHub Pages (.github/workflows/pages.yml); live once Pages source is set to GitHub Actions."
+    result: "deploy-fastapi.yml + committed manifest (python-fastapi, 3.11.2) ready; waiting for CONNECT_SERVER and CONNECT_API_KEY repo secrets. Static dashboard also on GitHub Pages."
 
   - id: H-07
     title: README and function documentation

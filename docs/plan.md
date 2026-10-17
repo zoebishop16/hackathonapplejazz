@@ -5,7 +5,8 @@ Source: the team's design document ("Design of Website.pdf"); SPEC.md section 4 
 ## Decisions
 - Track: on-campus (24 hours).
 - Stack: Python standard library computes every statistic into JSON; a static HTML/JS dashboard reads it.
-- Hosting: GitHub Pages (`.github/workflows/pages.yml`) instead of Posit Connect, so the team has a github.io link.
+- Stack (revised): public REST API with FastAPI (`app/app.py`) over `app/qc.py`, deployed to Posit Connect (`.github/workflows/deploy-fastapi.yml`); it also serves the dashboard. GitHub Pages keeps a static copy of the dashboard.
+- Python 3.11 for the API bundle (`app/.python-version`); built JSON in `app/site/data/` is committed because the API serves it.
 - Map: schematic SVG (no tiles, no keys). 20 stations, 4 districts.
 - "Now" in the live pages = four replay snapshots in week 3 (Wed 08:15, 12:00, 17:30; Sat 13:00).
 - Role-based access = a view switch (Analyst / Dispatcher), not a login.
@@ -16,9 +17,9 @@ Source: the team's design document ("Design of Website.pdf"); SPEC.md section 4 
 | H-01 | SPEC filled from the PDF | SPEC.md | `grep -c "FILL IN[.,]" SPEC.md` = 0 | - |
 | H-02 | 4 seeded datasets + codebook | data/, scripts/generate_data.py | identity bikes + docks = total on every row; rush pattern visible (residential 72% -> 18% by 8 AM) | - |
 | H-03 | statistics in app/qc.py | app/qc.py, tests/ | SPEC 4 (a)-(f) | constant data, n = 1, capacity 0, < 2 I-MR points, MTBF + MTTR = 0 |
-| H-04 | static site + build + testme | app/ | site numbers = qc.py output (build calls qc only) | missing JSON shows an error state with retry |
+| H-04 | FastAPI app + dashboard + build + testme | app/ | `/compute/*` reproduce SPEC 4 answers; `/datasets/*` match the reviewed JSON (tests/test_api.py) | bad input -> HTTP 422 with the reason; unknown dataset/snapshot -> 404 |
 | H-05 | demo walkthrough | demo/ | demo/README.md numbers match the JSON | - |
-| H-06 | publish | .github/workflows/ | Pages URL answers 200 | - |
+| H-06 | publish to Posit Connect | .github/workflows/, .github/scripts/, app/manifest.json, app/.python-version | `/health` answers 200 on the public URL | - |
 | H-07 | README | README.md, app/README.md | fresh clone runs `python3 app/testme.py` | - |
 | H-08 | public repo + Devpost | .gitignore | clone, test, run | - |
 
