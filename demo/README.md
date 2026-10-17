@@ -2,7 +2,7 @@
 
 Start it with `.venv/bin/python app/testme.py` and open
 http://localhost:8000/dashboard/ (the API docs are at http://localhost:8000/docs),
-or use the live site https://zoebishop16.github.io/hackathonapplejazz/.
+or use the live dashboard https://connect.systems-apps.com/content/0bd2254f-17a0-4a0a-b63b-73979c506f1e/dashboard/ (API docs: https://connect.systems-apps.com/content/0bd2254f-17a0-4a0a-b63b-73979c506f1e/docs; static copy: https://zoebishop16.github.io/hackathonapplejazz/).
 Every number below is also available from the API, for example
 `GET /datasets/normal_week__seed_1/xbar?scope=district:Northside` returns the
 Northside X̿ = 45.30 and σ_short = 10.52 from step 7. Pick the

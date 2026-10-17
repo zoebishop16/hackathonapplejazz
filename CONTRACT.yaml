@@ -105,7 +105,7 @@ tasks:
   - id: H-06
     title: Deploy to the course Posit Connect server
     points: "protects the 25 working-tool points - judges must be able to open it"
-    status: in_progress
+    status: done
     owner: "Claude Code for Apple Jazz"
     started_at: "2026-10-16"
     owns: [".github/workflows/", ".github/scripts/", "app/manifest.json", "app/.python-version"]
@@ -120,7 +120,7 @@ tasks:
     definition_of_done: >
       The workflow run is green, and the public URL answers HTTP 200 from a
       logged-out browser and returns the H-03 numbers for one test dataset.
-    result: "deploy-fastapi.yml + committed manifest (python-fastapi, 3.11.2) ready; waiting for CONNECT_SERVER and CONNECT_API_KEY repo secrets. Static dashboard also on GitHub Pages."
+    result: "Live on Posit Connect (https://connect.systems-apps.com/content/0bd2254f-17a0-4a0a-b63b-73979c506f1e/); deploy-fastapi.yml green; /health, /docs, /dashboard/ and /compute/fill answer 200 logged out with the SPEC 4 numbers."
 
   - id: H-07
     title: README and function documentation

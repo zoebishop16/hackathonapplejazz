@@ -1,7 +1,9 @@
 # Dock Watch: a bikeshare dock-availability QC REST API and dashboard
 
-**REST API (FastAPI) on Posit Connect:** the link is added here after the first deploy (see [Deploy](#deploy)).
-Interactive docs at `/docs`, dashboard at `/dashboard/`.
+**REST API (FastAPI) on Posit Connect:** https://connect.systems-apps.com/content/0bd2254f-17a0-4a0a-b63b-73979c506f1e/
+- Interactive API docs (try every endpoint): https://connect.systems-apps.com/content/0bd2254f-17a0-4a0a-b63b-73979c506f1e/docs
+- Dashboard: https://connect.systems-apps.com/content/0bd2254f-17a0-4a0a-b63b-73979c506f1e/dashboard/
+- Health check: https://connect.systems-apps.com/content/0bd2254f-17a0-4a0a-b63b-73979c506f1e/health
 **Dashboard on GitHub Pages:** https://zoebishop16.github.io/hackathonapplejazz/
 **Prompt:** Urban Systems: Bikeshare Fleets (Cornell Six Sigma Hackathon, on-campus track)
 
