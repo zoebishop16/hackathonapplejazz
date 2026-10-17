@@ -354,15 +354,15 @@ def heatmap(stations, polls):
     return out
 
 
-BLOCK_HOURS = 3  # control-chart subgroup: 00:01-03:00, 03:01-06:00, ... (8 per day)
+BLOCK_HOURS = 8  # control-chart subgroup: 00:01-08:00, 08:01-16:00, 16:01-24:00 (3 per day)
 
 
 def block_open_pct(polls):
     """{(day, block): [% open docks at each active poll]} for one station.
 
-    Block b of a day covers the polls after b*3:00 up to and including
-    (b+1)*3:00, so 03:00 belongs to 00:01-03:00 and midnight closes the
-    previous day's 21:01-24:00 block.
+    Block b of a day covers the polls after b*8:00 up to and including
+    (b+1)*8:00, so 08:00 belongs to 00:01-08:00, 16:00 to 08:01-16:00, and
+    midnight closes the previous day's 16:01-24:00 block.
     """
     acc = defaultdict(list)
     t0 = polls[0]["time"]
@@ -377,10 +377,10 @@ def block_open_pct(polls):
 
 
 def xbar_series(stations, polls):
-    """X-bar chart of % docks open, one subgroup per 3-hour block (8 a day, 168 in all).
+    """X-bar chart of % docks open, one subgroup per 8-hour block (3 a day, 63 in all).
 
     Each observation is one station's % open docks at one 5-minute poll in that
-    block, so a block holds up to 36 x (stations in scope) values. Limits use
+    block, so a block holds up to 96 x (stations in scope) values. Limits use
     the most common subgroup size for every point (flat limits).
     """
     per = {s["station_id"]: block_open_pct(polls[s["station_id"]]) for s in stations}
@@ -403,7 +403,7 @@ def xbar_series(stations, polls):
                 groups.append((f"{DOW[date.weekday()]} {date.strftime('%m-%d')} {h0:02d}:01-{h1:02d}:00", vals))
         res = qc.xbar_chart(groups, constant_limits=True)
         out[name] = {"grand_mean": r(res["grand_mean"]), "sigma_short": r(res["sigma_short"]),
-                     "n_limits": res["n_limits"], "message": res["message"], "subgroup": "3-hour block",
+                     "n_limits": res["n_limits"], "message": res["message"], "subgroup": "8-hour block",
                      "points": [{"label": p["label"], "n": p["n"], "mean": r(p["mean"]),
                                  "ucl": r(p["ucl"]), "lcl": r(p["lcl"]), "out": p["out"]}
                                 for p in res["points"]]}

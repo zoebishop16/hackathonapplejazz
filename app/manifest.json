@@ -26,43 +26,43 @@
       "checksum": "61939823fbcc7e8de3b61ab105331baf"
     },
     "README.md": {
-      "checksum": "3cccf28d98633178cff337700cbbd362"
+      "checksum": "01504d6d4387223d147b69de1c375f7a"
     },
     "app.py": {
-      "checksum": "17016812d7ec03f60bbd656fc16c0863"
+      "checksum": "23fd3c3608b4cc4f9caffe29802d8b1d"
     },
     "qc.py": {
       "checksum": "50f83c7630c7cf9c4478cacae70870af"
     },
     "site/app.js": {
-      "checksum": "9e69a1c64f69080dff2c5a8734da997a"
+      "checksum": "1e06ba3196fc0ce7ea4c8c48d3549e57"
     },
     "site/calc.js": {
       "checksum": "0dbc225e31222b85d42b7b679782205b"
     },
     "site/data/high_failure_week__seed_1.json": {
-      "checksum": "93bb461b9c684e43a6a9811caee416dd"
+      "checksum": "8f48c4751cb9c8de0b73e9690c3751c2"
     },
     "site/data/high_failure_week__seed_2.json": {
-      "checksum": "9527c9251d666a9cec2f3aa0626ec538"
+      "checksum": "e89e8975c721d55052ea23824fa9666a"
     },
     "site/data/index.json": {
       "checksum": "03d688c1a5ee2b8018284f102cd0ecb3"
     },
     "site/data/normal_week__seed_1.json": {
-      "checksum": "12dc31b9018509d15d0f159baef39e6e"
+      "checksum": "706896f76ba89143ff9b7c357338cbb0"
     },
     "site/data/normal_week__seed_2.json": {
-      "checksum": "ada63375561309e98f73f33b6a53d13e"
+      "checksum": "0c2f0c786a89a0ba0d5b8ba006a06344"
     },
     "site/index.html": {
-      "checksum": "afc983e01a0faa412677ebb58b6c4334"
+      "checksum": "5eb4760cf8c225b45e0bca2bb01a4cdf"
     },
     "site/package.json": {
       "checksum": "07613765e9341a0662911bdef9f5bb2b"
     },
     "site/styles.css": {
-      "checksum": "f109e619cc39aaa8a381ca45a70ff53c"
+      "checksum": "ee612707ed8dfc08c9fd58ea8e519959"
     }
   }
 }

@@ -49,12 +49,12 @@ def test_station_detail_and_heatmap():
     assert len(h["percent"]) == 7 and len(h["percent"][0]) == 24
 
 
-def test_xbar_three_hour_blocks():
-    """Recompute the first 3-hour block straight from status.csv and compare with the API."""
+def test_xbar_eight_hour_blocks():
+    """Recompute the first 8-hour block straight from status.csv and compare with the API."""
     import csv
     x = client.get(f"/datasets/{DS}/xbar", params={"scope": "district:Back Bay"}).json()
-    assert x["subgroup"] == "3-hour block" and len(x["points"]) == 21 * 8
-    assert x["points"][0]["label"] == "Mon 09-07 00:01-03:00" and x["points"][1]["label"] == "Mon 09-07 03:01-06:00"
+    assert x["subgroup"] == "8-hour block" and len(x["points"]) == 21 * 3
+    assert [p["label"] for p in x["points"][:3]] == ["Mon 09-07 00:01-08:00", "Mon 09-07 08:01-16:00", "Mon 09-07 16:01-24:00"]
     assert len({p["ucl"] for p in x["points"]}) == 1  # one flat pair of limits
     with open("data/normal_week/seed_1/stations.csv") as fh:
         ids = {s["station_id"] for s in csv.DictReader(fh) if s["district"] == "Back Bay"}
@@ -62,13 +62,13 @@ def test_xbar_three_hour_blocks():
     with open("data/normal_week/seed_1/status.csv") as fh:
         for row in csv.DictReader(fh):
             t = row["timestamp"]
-            in_block = t.startswith("2026-09-07") and "00:05" <= t[11:] <= "03:00"
+            in_block = t.startswith("2026-09-07") and "00:05" <= t[11:] <= "08:00"
             if row["station_id"] in ids and in_block and row["status"] == "active":
                 eff = int(row["num_bikes_available"]) + int(row["num_bikes_disabled"]) + int(row["num_docks_available"])
                 if eff:
                     obs.append(100 * int(row["num_docks_available"]) / eff)
     first = x["points"][0]
-    assert first["n"] == len(obs) and x["n_limits"] == 36 * len(ids)
+    assert first["n"] == len(obs) and x["n_limits"] == 96 * len(ids)
     assert first["mean"] == pytest.approx(sum(obs) / len(obs), abs=0.01)
     assert client.get(f"/datasets/{DS}/xbar", params={"scope": "district:Nowhere"}).status_code == 404
 
@@ -169,3 +169,17 @@ def test_overview_matches_station_rows_and_ranking():
         oos = {r["id"] for r in rows if r["status"] != "active"}
         assert oos <= {f["id"] for f in fc}
         assert all(a["risk_pct"] is None or 0 <= a["risk_pct"] <= 100 for a in o["at_risk"])
+
+
+def test_xbar_block_boundaries():
+    """08:00 closes the first block and 16:00 the second (blocks are x:01 to y:00)."""
+    import sys
+    sys.path.insert(0, "app")
+    import build
+    from datetime import datetime
+    t0 = datetime(2026, 9, 7)
+    polls = [{"time": datetime(2026, 9, 7, h, m), "active": True, "eff": 10, "da": da}
+             for h, m, da in [(0, 0, 0), (8, 0, 2), (8, 5, 4), (16, 0, 6), (16, 5, 8), (23, 55, 9)]]
+    polls[0]["time"] = t0
+    acc = build.block_open_pct(polls)
+    assert dict(acc) == {(0, 0): [20.0], (0, 1): [40.0, 60.0], (0, 2): [80.0, 90.0]}

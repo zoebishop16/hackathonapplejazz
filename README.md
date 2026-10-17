@@ -79,7 +79,7 @@ left from any page to return to it.
 | **Map** | a muted street map of Boston (OpenStreetMap, desaturated so markers stand out) with every station colored *and shaped* by fill level, and the 8 vans; filters by district, status, time of last update, open docks, problem stations only; click a station for fill %, bikes, effective capacity, broken docks. Below it, the hour × weekday heatmap with the same filters | ▽ red empty, ◇ orange low, ● green medium, ■ blue high, ▲ purple full, ✕ dark gray out of service; a dashed ring marks a problem station, `!` a misleading fill. Dark weekday 7-9 AM and 4-6 PM heatmap cells are the rush pattern |
 | **Dispatch** | the forecast first (subheading: ranked by priority, then expected impact; offline stations and broken docks are ranked in too, the same order the Overview uses): every station ranked by priority, projected bikes at +30 min, 1 h, 1.5 h and 2 h, at-risk rows in red, checked against what happened. Then light-blue summary boxes (moves, open tasks, vans available, resolution time), recommended pickup → drop-off moves, a form to create a rebalancing task by hand, a task queue with Repair and Rebalancing tabs, and van status | only available vans (idle, not already assigned, with room for the bikes) are offered, nearest to the pick-up first; assignments are saved in your browser |
 | **Maintenance** | light-blue dock-health percentage boxes (broken docks, broken bikes, effective capacity, misleading fill, repeat offenders) and a table with a square for every dock (bike, broken bike, open, faulty ×, bike stuck !, never locks ∅) | ⚠ before a station name = misleading fill; the right-hand column is the repeat-offender report (3+ unplanned repairs and at least twice the network median) |
-| **Data Analysis** | tabs: FMEA (editable S/O/D, Pareto by RPN) and Control Charts (X-bar by 3-hour block, p-chart) | under each chart: the formula, how many points fall outside, and what the subgroup is |
+| **Data Analysis** | tabs: FMEA (editable S/O/D, Pareto by RPN) and Control Charts (X-bar by 8-hour block, p-chart) | under each chart: the formula, how many points fall outside, and what the subgroup is |
 
 The top bar on every page has the dataset, the snapshot time ("now" in the
 replay: Wed 08:15, Wed 12:00, Wed 17:30 or Sat 13:00 of week 3) and a
@@ -116,9 +116,9 @@ real system would get the first two from its public GBFS feed.
 | `forecast_bikes(...)` | bikes now + (historical fill later − historical fill now) × capacity, at +30 min, 1 h, 1.5 h, 2 h |
 
 How the charts are set up:
-- **X-bar by 3-hour block** of % docks open: one subgroup per block
-  (00:01-03:00, 03:01-06:00, ...; 8 a day, 168 in all); each observation is one
-  station's % open docks at one 5-minute poll, so a block holds 36 × stations
+- **X-bar by 8-hour block** of % docks open: one subgroup per block
+  (00:01-08:00, 08:01-16:00, 16:01-24:00; 3 a day, 63 in all); each observation is one
+  station's % open docks at one 5-minute poll, so a block holds 96 × stations
   values. The limits are one flat pair from the most common n. Rush and night
   blocks sit outside by design (the commuter day); a block that breaks its
   usual weekly pattern is the one to look into.

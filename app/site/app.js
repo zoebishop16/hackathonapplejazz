@@ -6,7 +6,8 @@ import { rpn, pareto } from "./calc.js";
 
 // ------------------------------------------------------------------ constants
 const PAGES = [
-  { id: "overview", title: "Network Overview", nav: "Overview", sub: "Track dock availability, find unusable stations, and decide where to send vans.", icon: "M3 3h6v6H3zM11 3h6v4h-6zM11 9h6v8h-6zM3 11h6v6H3z" },
+  // the landing page: not in the sidebar; reached by opening the site or clicking "Dock Watch"
+  { id: "overview", title: "Network Overview", inNav: false, sub: "Track dock availability, find unusable stations, and decide where to send vans.", icon: "M3 3h6v6H3zM11 3h6v4h-6zM11 9h6v8h-6zM3 11h6v6H3z" },
   { id: "map", title: "Map", icon: "M10 2a6 6 0 0 0-6 6c0 4.5 6 10 6 10s6-5.5 6-10a6 6 0 0 0-6-6zm0 8.2A2.2 2.2 0 1 1 10 5.8a2.2 2.2 0 0 1 0 4.4z" },
   { id: "dispatch", title: "Dispatch", icon: "M1 6h11v8H1zM12 9h4l3 3v2h-7zM5 16.5a1.5 1.5 0 1 0 0-.01M15 16.5a1.5 1.5 0 1 0 0-.01" },
   { id: "maintenance", title: "Maintenance", icon: "M13.5 2.5a4 4 0 0 0-4.9 5.2L2.5 13.8l3.7 3.7 6.1-6.1a4 4 0 0 0 5.2-4.9l-2.4 2.4-2.5-.6-.6-2.5z" },
@@ -106,8 +107,9 @@ document.addEventListener("mousemove", (e) => {
 
 // --------------------------------------------------------------------- shell
 function renderNav() {
-  $("#nav").innerHTML = PAGES.map((p) => `<a href="#${p.id}" ${p.id === S.page ? 'aria-current="page"' : ""} title="${p.title}">
-      <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="${p.icon}" ${p.stroke ? 'fill="none" stroke="currentColor" stroke-width="1.8"' : 'fill="currentColor"'} /></svg><span>${p.nav || p.title}</span></a>`).join("");
+  $("#nav").innerHTML = PAGES.filter((p) => p.inNav !== false).map((p) => `<a href="#${p.id}" ${p.id === S.page ? 'aria-current="page"' : ""} title="${p.title}">
+      <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="${p.icon}" ${p.stroke ? 'fill="none" stroke="currentColor" stroke-width="1.8"' : 'fill="currentColor"'} /></svg><span>${p.title}</span></a>`).join("");
+  $("#home").toggleAttribute("aria-current", S.page === "overview");
 }
 
 function renderTop() {
@@ -744,14 +746,14 @@ function tabFmea(el) {
 function tabControl(el) {
   const scopes = Object.keys(S.data.xbar);
   const xb = S.data.xbar[S.xbarScope] || S.data.xbar.network;
-  const xLabels = xb.points.map((p, i) => [i, p.label.slice(0, 9)]).filter(([i, lab]) => lab.startsWith("Mon") && xb.points[i].label.endsWith("00:01-03:00"));
+  const xLabels = xb.points.map((p, i) => [i, p.label.slice(0, 9)]).filter(([i, lab]) => lab.startsWith("Mon") && xb.points[i].label.endsWith("00:01-08:00"));
   const scopeLabel = (k) => (k === "network" ? "Whole network" : k.startsWith("district:") ? `District: ${k.slice(9)}` : `Station ${stName(k)}`);
   const nStations = S.xbarScope === "network" ? S.data.stations.length : S.xbarScope.startsWith("district:") ? S.data.stations.filter((s) => s.district === S.xbarScope.slice(9)).length : 1;
   const xbOut = xb.points.filter((p) => p.out);
   const pc = S.data.pchart[S.pWindow];
   const tueCount = pc.points.filter((p) => p.phase === "baseline").length;
   el.innerHTML = `<div class="stack">
-    <div class="card"><div class="card-h"><h2>Averages (X-bar) chart by 3-hour block · % of docks open</h2>
+    <div class="card"><div class="card-h"><h2>Averages (X-bar) chart by 8-hour block · % of docks open</h2>
       <label class="row small">Scope <select id="xb-scope">${scopes.map((k) => `<option value="${k}" ${k === S.xbarScope ? "selected" : ""}>${esc(scopeLabel(k))}</option>`).join("")}</select></label></div>
       <div class="card-b">
         ${xb.message ? `<p class="badge warn">${esc(xb.message)}</p>` : ""}
@@ -762,7 +764,7 @@ function tabControl(el) {
         <div class="grid cols-3 chart-notes">
           <div class="formula">UCL, LCL = X̿ ± 3 · σ_short / √n<br>X̿ = ${fmt(xb.grand_mean, 2)}%<br>σ_short = √(mean of subgroup variances) = ${fmt(xb.sigma_short, 2)}<br>n = ${xb.n_limits} (most common subgroup size, used for every limit)<br>UCL = ${fmt(xb.points[0].ucl, 2)}, LCL = ${fmt(xb.points[0].lcl, 2)}</div>
           <div class="small"><b>${xbOut.length} of ${xb.points.length}</b> blocks outside the limits.</div>
-          <p class="howto" style="margin:0">Subgroup = one 3-hour block (00:01-03:00, 03:01-06:00, ... 8 a day): % open docks at every 5-minute poll in the block (${nStations} station${nStations === 1 ? "" : "s"} × 36 polls).</p>
+          <p class="howto" style="margin:0">Subgroup = one 8-hour block (00:01-08:00, 08:01-16:00, 16:01-24:00; 3 a day): % open docks at every 5-minute poll in the block (${nStations} station${nStations === 1 ? "" : "s"} × 96 polls).</p>
         </div>
       </div></div>
     <div class="card"><div class="card-h"><h2>p-chart · proportion of stations unusable at each poll</h2>
