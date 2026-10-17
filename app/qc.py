@@ -117,13 +117,15 @@ def event_log(polls, poll_minutes=5):
 # ------------------------------------------------------------- X-bar chart
 
 def mean(xs):
-    return sum(xs) / len(xs)
+    """Arithmetic mean. math.fsum is exactly rounded, so every Python version
+    gives the same answer (built-in sum() changed its float rounding in 3.12)."""
+    return math.fsum(xs) / len(xs)
 
 
 def variance(xs):
     """Sample variance (n - 1 denominator)."""
     m = mean(xs)
-    return sum((x - m) ** 2 for x in xs) / (len(xs) - 1)
+    return math.fsum((x - m) ** 2 for x in xs) / (len(xs) - 1)
 
 
 def xbar_chart(subgroups):
