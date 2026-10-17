@@ -43,6 +43,15 @@ app = FastAPI(
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
+@app.middleware("http")
+async def revalidate_dashboard(request, call_next):
+    """Make browsers re-check dashboard files on every visit, so an update is never hidden by a stale cache."""
+    response = await call_next(request)
+    if request.url.path.startswith("/dashboard"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 # ------------------------------------------------------------------ loading
 
 @lru_cache(maxsize=None)
@@ -220,16 +229,6 @@ def heatmap(dataset_id: str, metric: Literal["empty", "full", "unusable", "fill"
             "columns": list(range(24)), "percent": grid}
 
 
-@app.get("/datasets/{dataset_id}/events", tags=["datasets"])
-def events(dataset_id: str, station: Optional[List[str]] = None,
-           kind: Optional[Literal["stockout", "fullout"]] = None,
-           limit: int = Query(100, ge=1, le=5000), offset: int = Query(0, ge=0)):
-    """Stockout (0 bikes) and fullout (0 open docks) log: station, start, duration in minutes."""
-    evs = [e for e in _dataset(dataset_id)["events"]
-           if (not station or e["station"] in station) and (not kind or e["kind"] == kind)]
-    return {"total": len(evs), "offset": offset, "events": evs[offset:offset + limit]}
-
-
 @app.get("/datasets/{dataset_id}/forecast", tags=["datasets"])
 def forecast(dataset_id: str, snapshot: Optional[str] = SnapshotQ, at_risk_only: bool = True):
     """At-risk list for the next 30-60 minutes, ranked by urgency then impact."""
@@ -267,23 +266,18 @@ def maintenance(dataset_id: str, snapshot: Optional[str] = SnapshotQ, station: O
 
 
 @app.get("/datasets/{dataset_id}/xbar", tags=["control charts"])
-def xbar(dataset_id: str, scope: str = Query("district:Northside",
+def xbar(dataset_id: str, scope: str = Query("network",
                                              description="network, district:<name>, or a station id like S07")):
-    """Hourly averages (X-bar) chart of % docks open; subgroup = hour of the week.
+    """Daily averages (X-bar) chart of % docks open; subgroup = one day.
 
-    UCL, LCL = grand mean +/- 3 sigma_short / sqrt(n); sigma_short = sqrt(mean
-    of within-subgroup variances). Rush hours fall outside by design.
+    Observations = each station's hourly average that day. UCL, LCL = grand
+    mean +/- 3 sigma_short / sqrt(n); sigma_short = sqrt(mean of
+    within-subgroup variances).
     """
     d = _dataset(dataset_id)
     if scope not in d["xbar"]:
         raise HTTPException(404, f"Unknown scope '{scope}'. Use one of {list(d['xbar'])}.")
     return {"scope": scope, **d["xbar"][scope]}
-
-
-@app.get("/datasets/{dataset_id}/imr", tags=["control charts"])
-def imr(dataset_id: str):
-    """I-MR chart of response_min: limits from Tuesday work orders, Thursday plotted against them."""
-    return _dataset(dataset_id)["imr"]
 
 
 @app.get("/datasets/{dataset_id}/pchart", tags=["control charts"])
@@ -370,17 +364,6 @@ class XbarIn(BaseModel):
 def compute_xbar(body: XbarIn):
     """Averages chart: grand mean, sigma_short = sqrt(mean within-subgroup variance), limits per subgroup."""
     return _check(qc.xbar_chart, [(s.label, s.values) for s in body.subgroups])
-
-
-class ImrIn(BaseModel):
-    baseline: List[float] = Field(..., examples=[[10, 12, 14, 12]])
-    monitor: List[float] = Field(default_factory=list, examples=[[20]])
-
-
-@app.post("/compute/imr", tags=["compute"])
-def compute_imr(body: ImrIn):
-    """I-MR chart: limits x-bar +/- 3 MR-bar/1.128 and MR UCL 3.267 MR-bar from the baseline."""
-    return _check(qc.imr_chart, body.baseline, body.monitor)
 
 
 class Count(BaseModel):

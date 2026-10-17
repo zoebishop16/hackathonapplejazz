@@ -33,12 +33,10 @@ GET: results for the four test datasets. `{id}` is one of `normal_week__seed_1`,
 | `/datasets/{id}/stations` | every station at a snapshot (fill %, category, bikes, effective capacity, broken docks, flags); filters `district`, `status`, `max_feed_age`, `stale_only`, `min_open_docks`, `problem_only` |
 | `/datasets/{id}/stations/{station}` | one station with its dock grid, forecast, reliability and repair tickets |
 | `/datasets/{id}/heatmap` | 7 × 24 grid; `metric` = `empty`, `full`, `unusable` or `fill`; same filters |
-| `/datasets/{id}/events` | stockout / fullout log; `station`, `kind`, `limit`, `offset` |
-| `/datasets/{id}/forecast` | at-risk list for the next 30-60 minutes |
-| `/datasets/{id}/dispatch` | recommended moves, repair and rebalancing queues, vans |
-| `/datasets/{id}/maintenance` | MTTR, backlog, repeat offenders, tickets; `station` for one history |
-| `/datasets/{id}/xbar` | hourly X-bar chart; `scope` = `network`, `district:Northside`, `S07`, ... |
-| `/datasets/{id}/imr` | I-MR of `response_min`, Tuesday limits, Thursday monitored |
+| `/datasets/{id}/forecast` | at-risk list for the next 2 hours (+30 min, 1 h, 1.5 h, 2 h), ranked by priority |
+| `/datasets/{id}/dispatch` | recommended moves, repair and rebalancing queues, the 8 vans |
+| `/datasets/{id}/maintenance` | MTTR, backlog, repeat offenders and threshold, repair counts, tickets; `station` for one history |
+| `/datasets/{id}/xbar` | daily X-bar chart (subgroup = one day); `scope` = `network`, `district:Back Bay`, `S07`, ... |
 | `/datasets/{id}/pchart` | p-chart of unusable stations; `window` = `off_peak` or `all_day` |
 | `/datasets/{id}/fmea` | FMEA rows and Pareto order |
 | `/datasets/{id}/reliability` | per-station and network reliability, MTBF, MTTR, availability |
@@ -50,7 +48,6 @@ POST: the same statistics on your own numbers (bad input → HTTP 422 with the r
 | `/compute/fill` | `{"total_docks": 12, "docks_disabled": 4, "bikes_available": 6}` | effective capacity 8, fill 75%, "high", flag "looks_emptier" |
 | `/compute/stockouts` | `{"polls": [{"time": "08:05", "bikes_available": 0, "docks_available": 12}, ...]}` | episodes with start and duration |
 | `/compute/xbar` | `{"subgroups": [{"label": "A", "values": [10,20,30]}, {"label": "B", "values": [40,50,60]}]}` | X̿ 35, σ_short 10, UCL 52.32, LCL 17.68 |
-| `/compute/imr` | `{"baseline": [10,12,14,12], "monitor": [20]}` | UCL 17.319, MR UCL 6.534, last point out |
 | `/compute/pchart` | `{"baseline": [{"defectives": 2, "n": 20}], "monitor": [...]}` | p̄, limits per point |
 | `/compute/fmea` | `{"modes": [{"name": "...", "severity": 8, "occurrence": 5, "detection": 3}]}` | RPN 120 and the Pareto order (`occurrence_rate` instead of `occurrence` maps a rate to 1-10) |
 | `/compute/reliability` | `{"structure": "series", "reliabilities": [0.9, 0.8]}` | 0.72 (parallel: 0.98) |

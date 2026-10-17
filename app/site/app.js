@@ -1,19 +1,18 @@
 // Dock Watch: a static dashboard over the JSON written by app/build.py.
 // Every statistic shown here was computed in app/qc.py. This file only
-// filters, sorts and draws, except the editable FMEA and reliability panels,
-// which recalculate with calc.js (a tested mirror of qc.py).
-import { rpn, series, parallel, availability, pareto } from "./calc.js";
+// filters, sorts and draws, except the editable FMEA table, which recalculates
+// with calc.js (a tested mirror of qc.py).
+import { rpn, pareto } from "./calc.js";
 
 // ------------------------------------------------------------------ constants
 const PAGES = [
-  { id: "map", title: "Live Map", icon: "M10 2a6 6 0 0 0-6 6c0 4.5 6 10 6 10s6-5.5 6-10a6 6 0 0 0-6-6zm0 8.2A2.2 2.2 0 1 1 10 5.8a2.2 2.2 0 0 1 0 4.4z" },
-  { id: "stockouts", title: "Stockouts & Heatmap", icon: "M3 3h4v4H3zM8 3h4v4H8zM13 3h4v4h-4zM3 8h4v4H3zM8 8h4v4H8zM13 8h4v4h-4zM3 13h4v4H3zM8 13h4v4H8zM13 13h4v4h-4z" },
-  { id: "docks", title: "Dock Health", icon: "M3 4h3v12H3zM8.5 4h3v12h-3zM14 4h3v12h-3z" },
-  { id: "forecast", title: "Forecast & At-Risk", icon: "M2 15l5-5 3 3 6-7M12 6h4v4" , stroke: true },
+  { id: "map", title: "Map", icon: "M10 2a6 6 0 0 0-6 6c0 4.5 6 10 6 10s6-5.5 6-10a6 6 0 0 0-6-6zm0 8.2A2.2 2.2 0 1 1 10 5.8a2.2 2.2 0 0 1 0 4.4z" },
   { id: "dispatch", title: "Dispatch", icon: "M1 6h11v8H1zM12 9h4l3 3v2h-7zM5 16.5a1.5 1.5 0 1 0 0-.01M15 16.5a1.5 1.5 0 1 0 0-.01" },
   { id: "maintenance", title: "Maintenance", icon: "M13.5 2.5a4 4 0 0 0-4.9 5.2L2.5 13.8l3.7 3.7 6.1-6.1a4 4 0 0 0 5.2-4.9l-2.4 2.4-2.5-.6-.6-2.5z" },
-  { id: "analysis", title: "Data Analysis", icon: "M3 17V9h3v8zM8.5 17V4h3v13zM14 17v-6h3v6z", analystOnly: true },
+  { id: "analysis", title: "Data Analysis", icon: "M3 17V9h3v8zM8.5 17V4h3v13zM14 17v-6h3v6z" },
 ];
+// old page links land on the page that now holds them
+const PAGE_ALIASES = { stockouts: "map", docks: "maintenance", forecast: "dispatch", reliability: "analysis" };
 const CATS = ["empty", "low", "medium", "high", "full", "out_of_service"];
 const CAT_LABEL = { empty: "Empty (0%)", low: "Low (1-29%)", medium: "Medium (30-69%)", high: "High (70-99%)", full: "Full (100%)", out_of_service: "Out of service" };
 const CAT_COLOR = { empty: "var(--empty)", low: "var(--low)", medium: "var(--medium)", high: "var(--high)", full: "var(--full)", out_of_service: "var(--oos)" };
@@ -42,10 +41,10 @@ const store = {
 };
 const S = {
   index: [], data: null, datasetId: store.get("dataset", null), snap: store.get("snapshot", null),
-  role: store.get("role", "analyst"), page: "map", selected: null, loading: true, error: null,
+  page: "map", selected: null, loading: true, error: null,
   filters: { districts: null, status: "all", updated: "any", minOpen: 0, problemOnly: false },
-  heatMetric: "empty", eventKind: "all", eventSort: "start", eventPage: 0,
-  analysisTab: "fmea", queueTab: "repair", xbarScope: "district:Northside", pWindow: "off_peak",
+  heatMetric: "empty",
+  analysisTab: "fmea", queueTab: "repair", xbarScope: "network", pWindow: "off_peak",
   fmeaEdits: {}, local: store.get("local", { assigned: {}, done: {} }),
 };
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -106,8 +105,7 @@ document.addEventListener("mousemove", (e) => {
 
 // --------------------------------------------------------------------- shell
 function renderNav() {
-  const pages = PAGES.filter((p) => !(p.analystOnly && S.role === "dispatcher"));
-  $("#nav").innerHTML = pages.map((p) => `<a href="#${p.id}" ${p.id === S.page ? 'aria-current="page"' : ""} title="${p.title}">
+  $("#nav").innerHTML = PAGES.map((p) => `<a href="#${p.id}" ${p.id === S.page ? 'aria-current="page"' : ""} title="${p.title}">
       <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="${p.icon}" ${p.stroke ? 'fill="none" stroke="currentColor" stroke-width="1.8"' : 'fill="currentColor"'} /></svg><span>${p.title}</span></a>`).join("");
 }
 
@@ -142,8 +140,7 @@ function render() {
     return;
   }
   try {
-    ({ map: pageMap, stockouts: pageStockouts, docks: pageDocks, forecast: pageForecast, dispatch: pageDispatch,
-      maintenance: pageMaintenance, analysis: pageAnalysis })[S.page](el);
+    ({ map: pageMapAll, dispatch: pageDispatchAll, maintenance: pageMaintenanceAll, analysis: pageAnalysis })[S.page](el);
   } catch (err) {
     console.error(err);
     el.innerHTML = `<div class="card state error" role="alert"><p><b>This page failed to draw.</b></p><p class="mono">${esc(err.message)}</p></div>`;
@@ -179,7 +176,6 @@ function bindFilters(root) {
       else if (k === "minOpen") f.minOpen = Math.max(0, parseInt(el.value || "0", 10));
       else if (k === "reset") Object.assign(f, { districts: null, status: "all", updated: "any", minOpen: 0, problemOnly: false });
       else f[k] = el.value;
-      S.eventPage = 0;
       render();
     });
   });
@@ -197,63 +193,102 @@ function passes(r) {
 }
 function filteredIds() { return snapData().stations.filter(passes).map((r) => r.id); }
 
-// ------------------------------------------------------------------ Live Map
-function pageMap(el) {
+// ----------------------------------------------------------------- Map page
+// Live map of Boston (Leaflet + the standard OpenStreetMap street layer, a
+// key-free equivalent of the Google Maps default layer) with the heatmap below.
+const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+function pageMapAll(el) {
   const rows = snapData().stations;
-  const keep = new Set(filteredIds());
-  const stations = S.data.stations;
-  const districts = {};
-  stations.forEach((s) => { (districts[s.district] ||= []).push(s); });
-  const regions = Object.entries(districts).map(([d, ss]) => {
-    const xs = ss.map((s) => s.x), ys = ss.map((s) => s.y);
-    const x0 = Math.min(...xs) - 6, x1 = Math.max(...xs) + 6, y0 = Math.min(...ys) - 6, y1 = Math.max(...ys) + 6;
-    return `<rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}" rx="4" fill="#eef0f3" stroke="#dfe3e8" stroke-width=".3"/>
-      <text x="${x0 + 1.5}" y="${y0 + 3.4}" font-size="2.6" fill="#8a939c" font-weight="600">${d.toUpperCase()}</text>`;
-  }).join("");
-  const marks = rows.map((r) => {
-    const s = stationInfo(r.id);
-    const dim = keep.has(r.id) ? 1 : .12;
-    const prob = isProblem(r) ? `<circle r="3.3" fill="none" stroke="#1d2125" stroke-width=".25" stroke-dasharray=".8 .6"/>` : "";
-    const warn = r.misleading ? `<text x="2.6" y="-2.2" font-size="2.6" fill="#8a5200" font-weight="700">!</text>` : "";
-    const oos = r.category === "out_of_service";
-    const tipText = `${r.id} ${s.name} (${s.district})\n${CAT_LABEL[r.category]}${r.fill_pct !== null && !oos ? ` · ${fmt(r.fill_pct)}% full` : ""}\n${r.bikes_available} bikes · ${r.docks_available} open docks · ${r.docks_disabled} broken docks${r.status !== "active" ? `\nStatus: ${STATUS_LABEL[r.status]}` : ""}`;
-    return `<g class="station ${S.selected === r.id ? "sel" : ""}" transform="translate(${s.x} ${s.y})" opacity="${dim}" data-id="${r.id}" data-tip="${esc(tipText)}" tabindex="0" role="button" aria-label="${esc(tipText.replace(/\n/g, ", "))}">
-      ${prob}<g class="mk" fill="${oos ? "none" : CAT_COLOR[r.category]}" stroke="${oos ? CAT_COLOR.out_of_service : "#fff"}" stroke-width="${oos ? 0 : .35}">${oos ? `<g stroke="${CAT_COLOR.out_of_service}">${shapePath("out_of_service", 2)}</g>` : shapePath(r.category, 2)}</g>
-      ${warn}<text y="5.2" text-anchor="middle" font-size="2.1" fill="#5d6670">${r.id}</text></g>`;
-  }).join("");
-  const vans = snapData().vans.map((v) => `<g transform="translate(${v.x + (v.station === "depot" ? 0 : 3.2)} ${v.y - (v.station === "depot" ? 0 : 3.2)})" data-tip="${esc(`${v.name}: ${v.status}${v.station !== "depot" ? ` at ${v.station}` : " at depot"} · load ${v.load}/${v.capacity}`)}">
-      <rect x="-2.4" y="-1.3" width="4.8" height="2.6" rx=".6" fill="#fff" stroke="#3a3f45" stroke-width=".3"/><text y=".75" text-anchor="middle" font-size="1.7" fill="#3a3f45" font-weight="700">${v.van}</text></g>`).join("");
-  el.innerHTML = `<div class="map-layout">
+  const ids = filteredIds();
+  el.innerHTML = `<div class="grid with-filters">
     ${filtersHtml()}
-    <div class="card map-card">
-      <div class="card-h"><div>${fillLegend(`<span class="item"><b style="color:#8a5200">!</b> Misleading fill</span><span class="item"><svg width="22" height="14" viewBox="-2.6 -1.5 5.2 3" aria-hidden="true"><rect x="-2.4" y="-1.3" width="4.8" height="2.6" rx=".6" fill="#fff" stroke="#3a3f45" stroke-width=".3"/></svg>Van</span>`)}</div></div>
-      <svg class="map-svg" viewBox="${mapBox()}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Schematic map of stations">
-        ${regions}${vans}${marks}
-      </svg>
-      <p class="howto" style="margin:0 14px 12px">Fill % = bikes in docks ÷ effective capacity (total docks − broken docks). Faded stations are hidden by the filters. Hover or click a station for its counts. Schematic map: not to scale.</p>
-    </div>
-    <div class="card side" id="side">${sidePanel()}</div>
-  </div>`;
+    <div class="stack">
+      <div class="card map-card">
+        <div class="card-h"><div>${fillLegend(`<span class="item"><b style="color:#8a5200">!</b> Misleading fill</span><span class="item"><span class="van-badge" aria-hidden="true">V</span>Van</span>`)}</div></div>
+        <div class="map-wrap">
+          <div class="leaflet-box" id="leaflet" role="region" aria-label="Map of Boston bikeshare stations"><div class="state"><div class="spinner"></div>Loading map...</div></div>
+          <div class="side" id="side">${sidePanel()}</div>
+        </div>
+        <p class="howto" style="margin:0 14px 12px">Fill % = bikes in docks ÷ effective capacity (total docks − broken docks). Faded stations are hidden by the filters. Hover or click a station for its counts; drag and scroll to move around Boston.</p>
+      </div>
+      ${heatmapCard(ids)}
+    </div></div>`;
   bindFilters(el);
-  $("#filter-count").textContent = `${keep.size} of ${rows.length} stations shown`;
-  el.querySelectorAll(".station").forEach((g) => {
-    const pick = () => { S.selected = g.dataset.id; render(); };
-    g.addEventListener("click", pick);
-    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
-  });
+  $("#filter-count").textContent = `${ids.length} of ${rows.length} stations shown`;
+  drawLeaflet(rows, new Set(ids));
   const close = $("#close-side");
   if (close) close.onclick = () => { S.selected = null; render(); };
+  $("#heat-metric").onchange = (e) => { S.heatMetric = e.target.value; render(); };
 }
-function mapBox() {
-  const xs = S.data.stations.map((s) => s.x), ys = S.data.stations.map((s) => s.y);
-  const x0 = Math.min(...xs) - 9, y0 = Math.min(...ys) - 9;
-  return `${x0} ${y0} ${Math.max(...xs) - x0 + 9} ${Math.max(...ys) - y0 + 9}`;
+
+function stationIcon(r) {
+  const oos = r.category === "out_of_service";
+  const shape = oos
+    ? `<g stroke="${CAT_COLOR.out_of_service}" fill="none">${shapePath("out_of_service", 7)}</g>`
+    : `<g fill="${CAT_COLOR[r.category]}" stroke="#fff" stroke-width="1.6">${shapePath(r.category, 8)}</g>`;
+  const ring = isProblem(r) ? `<circle r="12.5" fill="none" stroke="#1d2125" stroke-width="1.2" stroke-dasharray="3 2.4"/>` : "";
+  const sel = S.selected === r.id ? `<circle r="15" fill="none" stroke="#1d2125" stroke-width="2"/>` : "";
+  const warn = r.misleading ? `<text x="9" y="-8" font-size="12" font-weight="800" fill="#8a5200" stroke="#fff" stroke-width="3" paint-order="stroke">!</text>` : "";
+  return L.divIcon({ className: "stn-icon", iconSize: [36, 36], iconAnchor: [18, 18],
+    html: `<svg width="36" height="36" viewBox="-18 -18 36 36" aria-hidden="true">${sel}${ring}${shape}${warn}</svg>` });
 }
+
+function drawLeaflet(rows, keep) {
+  const box = $("#leaflet");
+  if (S.leaflet) { S.leaflet.remove(); S.leaflet = null; }
+  if (!window.L) {
+    box.innerHTML = `<div class="state error" role="alert"><b>The map library did not load.</b><br>Check the internet connection and reload. The filters and heatmap still work.</div>`;
+    return;
+  }
+  box.innerHTML = "";
+  const map = L.map(box, { zoomControl: true, scrollWheelZoom: true, minZoom: 11 });
+  S.leaflet = map;
+  const tiles = L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR }).addTo(map);
+  let tileErrors = 0;
+  tiles.on("tileerror", () => {
+    if (++tileErrors === 6) box.insertAdjacentHTML("beforeend", `<div class="map-banner" role="alert">Map tiles are not loading (offline?). Stations are still placed correctly.</div>`);
+  });
+  const pts = S.data.stations.map((s) => [s.lat, s.lon]);
+  if (S.mapView) map.setView(S.mapView.center, S.mapView.zoom);
+  else map.fitBounds(pts, { padding: [28, 28] });
+  map.on("moveend", () => { S.mapView = { center: map.getCenter(), zoom: map.getZoom() }; });
+
+  // neighborhood (district) labels at each district's centre
+  const byD = {};
+  S.data.stations.forEach((s) => (byD[s.district] ||= []).push(s));
+  Object.entries(byD).forEach(([d, ss]) => {
+    const lat = ss.reduce((a, s) => a + s.lat, 0) / ss.length, lon = ss.reduce((a, s) => a + s.lon, 0) / ss.length;
+    L.marker([lat, lon], { interactive: false, keyboard: false,
+      icon: L.divIcon({ className: "district-label", html: `<span>${esc(d)}</span>`, iconSize: [140, 18], iconAnchor: [70, 30] }) }).addTo(map);
+  });
+
+  snapData().vans.forEach((v) => {
+    const off = v.station === "depot" ? [0, 0] : [0.0009, 0.0011];
+    L.marker([v.lat + off[0], v.lon + off[1]], { keyboard: false,
+      icon: L.divIcon({ className: "van-icon", html: `<span class="van-badge">${esc(v.van)}</span>`, iconSize: [30, 18], iconAnchor: [15, 9] }) })
+      .bindTooltip(`${esc(v.name)}: ${esc(v.status)}${v.station !== "depot" ? ` at ${esc(stName(v.station))}` : " at depot"}<br>load ${v.load}/${v.capacity} bikes`, { direction: "top" })
+      .addTo(map);
+  });
+
+  rows.forEach((r) => {
+    const s = stationInfo(r.id);
+    const oos = r.category === "out_of_service";
+    const tip = `<b>${esc(r.id)} ${esc(s.name)}</b> (${esc(s.district)})<br>${esc(CAT_LABEL[r.category])}${r.fill_pct !== null && !oos ? ` · ${fmt(r.fill_pct)}% full` : ""}<br>${r.bikes_available} bikes · ${r.docks_available} open docks · ${r.docks_disabled} broken docks${r.status !== "active" ? `<br>Status: ${esc(STATUS_LABEL[r.status])}` : ""}`;
+    L.marker([s.lat, s.lon], { icon: stationIcon(r), opacity: keep.has(r.id) ? 1 : 0.2, keyboard: true,
+      title: `${r.id} ${s.name}`, alt: `${r.id} ${s.name}, ${CAT_LABEL[r.category]}`, riseOnHover: true,
+      zIndexOffset: keep.has(r.id) ? 1000 : 0 })
+      .bindTooltip(tip, { direction: "top", offset: [0, -14] })
+      .on("click", () => { S.selected = r.id; render(); })
+      .addTo(map);
+  });
+}
+
 function sidePanel() {
   if (!S.selected) return `<div class="card-b"><h2>Station details</h2><p class="muted" style="margin-top:8px">Click a station on the map to see its fill, bikes, effective capacity and broken docks.</p></div>`;
   const r = rowFor(S.selected), s = stationInfo(S.selected);
   const oos = r.category === "out_of_service";
-  const bikes = r.bikes_available + r.bikes_disabled;
   const tickets = S.data.orders.filter((o) => o.station === r.id && o.type === "repair" && o.opened <= snapData().time).length;
   return `<div class="card-h"><div><h2>${esc(r.id)} ${esc(s.name)}</h2><div class="small muted">${esc(s.district)} · ${s.profile}</div></div><button class="icon-btn" id="close-side" aria-label="Close">✕</button></div>
   <div class="card-b stack" style="gap:12px">
@@ -267,26 +302,24 @@ function sidePanel() {
       <dt>Broken docks</dt><dd>${r.docks_disabled}</dd>
       <dt>Total docks</dt><dd>${s.total_docks}</dd>
       <dt>Effective capacity</dt><dd>${r.eff}</dd>
-      <dt>Fill (bikes ÷ effective)</dt><dd>${bikes} ÷ ${r.eff}</dd>
       <dt>Last reported</dt><dd>${esc(r.last_reported.slice(11))} (${fmt(r.feed_age_min)} min ago)</dd>
       <dt>Repair tickets so far</dt><dd>${tickets}</dd>
     </dl>
     ${r.misleading ? `<div class="badge warn" style="white-space:normal">⚠ ${FLAG_LABEL[r.misleading]}</div>` : ""}
     ${r.problems.length ? `<div class="small"><b>Problems:</b> ${r.problems.map((p) => PROBLEM_LABEL[p]).join(", ")}</div>` : `<div class="small muted">No problems at this snapshot.</div>`}
     ${r.feed_age_min > S.data.meta.stale_min ? `<p class="howto">Silent feed: these numbers are ${fmt(r.feed_age_min)} minutes old and may not be true now.</p>` : ""}
-    <a href="#docks" class="small">See dock-level health →</a>
+    <a href="#maintenance" class="small">See dock-level health →</a>
   </div>`;
 }
 
-// ------------------------------------------------------- Stockouts & Heatmap
+// ------------------------------------------------------------------ heatmap
 const HEAT = {
   empty: { label: "% of polls empty (0 bikes)", num: "empty", den: "active_n" },
   full: { label: "% of polls full (0 open docks)", num: "full", den: "active_n" },
   unusable: { label: "% of polls unusable (empty, full or out of service)", num: "unusable", den: "n" },
   fill: { label: "Average fill %", num: "fill_sum", den: "active_n" },
 };
-function pageStockouts(el) {
-  const ids = filteredIds();
+function heatmapCard(ids) {
   const m = HEAT[S.heatMetric];
   const cells = Array.from({ length: 168 }, (_, k) => {
     let num = 0, den = 0;
@@ -294,150 +327,136 @@ function pageStockouts(el) {
     return den ? (100 * num) / den : null;
   });
   const max = S.heatMetric === "fill" ? 100 : Math.max(5, ...cells.filter((v) => v !== null));
-  const cw = 34, ch = 26, left = 40, top = 22;
-  const shade = (v) => (v === null ? "#f3f4f6" : `rgba(209,52,44,${0.06 + 0.94 * (v / max)})`);
-  const fillShade = (v) => (v === null ? "#f3f4f6" : `rgba(44,111,191,${0.06 + 0.94 * (v / 100)})`);
+  const cw = 34, ch = 26, left = 40, top = 26;
+  const rgb = S.heatMetric === "fill" ? "44,111,191" : "209,52,44";
+  const shade = (v) => (v === null ? "#f3f4f6" : `rgba(${rgb},${0.06 + 0.94 * (v / max)})`);
   let svg = "";
-  for (let h = 0; h < 24; h++) svg += `<text x="${left + h * cw + cw / 2}" y="${top - 8}" text-anchor="middle">${h}</text>`;
   for (let d = 0; d < 7; d++) {
     svg += `<text x="${left - 8}" y="${top + d * ch + ch / 2 + 4}" text-anchor="end">${DOW[d]}</text>`;
     for (let h = 0; h < 24; h++) {
       const v = cells[d * 24 + h];
-      const rush = d < 5 && ((h >= 7 && h < 9) || (h >= 16 && h < 18));
-      svg += `<rect x="${left + h * cw + 1}" y="${top + d * ch + 1}" width="${cw - 2}" height="${ch - 2}" rx="3" fill="${S.heatMetric === "fill" ? fillShade(v) : shade(v)}" ${rush ? 'stroke="#1d2125" stroke-width="1"' : ""}
+      svg += `<rect x="${left + h * cw}" y="${top + d * ch}" width="${cw}" height="${ch}" fill="${shade(v)}" stroke="#fff" stroke-width="1"
         data-tip="${DOW[d]} ${String(h).padStart(2, "0")}:00-${String(h).padStart(2, "0")}:59\n${m.label}: ${v === null ? "no data" : v.toFixed(1) + "%"}\n${ids.length} stations"><title>${DOW[d]} ${h}:00 ${v === null ? "no data" : v.toFixed(1) + "%"}</title></rect>`;
       if (v !== null && v >= max * 0.45) svg += `<text x="${left + h * cw + cw / 2}" y="${top + d * ch + ch / 2 + 4}" text-anchor="middle" style="fill:#fff;font-size:9px;pointer-events:none">${Math.round(v)}</text>`;
     }
   }
-  const scaleColor = S.heatMetric === "fill" ? "44,111,191" : "209,52,44";
-  const now = snapData().time;
-  const evs = S.data.events.filter((e) => ids.includes(e.station) && e.start <= now && (S.eventKind === "all" || e.kind === S.eventKind)).map((e) => {
-    const end = addMin(e.start, e.duration_min);
-    const ongoing = end > now || e.ongoing;
-    return { ...e, ongoingNow: ongoing, shown: ongoing ? minsBetween(e.start, now) : e.duration_min };
-  });
-  evs.sort((a, b) => (S.eventSort === "duration" ? b.shown - a.shown : S.eventSort === "station" ? a.station.localeCompare(b.station) || b.start.localeCompare(a.start) : b.start.localeCompare(a.start)));
-  const per = 50, pages = Math.max(1, Math.ceil(evs.length / per));
-  S.eventPage = Math.min(S.eventPage, pages - 1);
-  const pageRows = evs.slice(S.eventPage * per, S.eventPage * per + per);
-  const nStock = evs.filter((e) => e.kind === "stockout").length, nFull = evs.filter((e) => e.kind === "fullout").length;
-  const totalMin = evs.reduce((a, e) => a + e.shown, 0);
-  el.innerHTML = `<div class="grid with-filters">
-    ${filtersHtml()}
-    <div class="stack">
-      <div class="card">
-        <div class="card-h"><h2>Rush-hour heatmap · hour × day of week</h2>
-          <label class="row small">Metric <select id="heat-metric">${Object.entries(HEAT).map(([k, v]) => `<option value="${k}" ${k === S.heatMetric ? "selected" : ""}>${v.label}</option>`).join("")}</select></label></div>
-        <div class="card-b">
-          <svg class="heat" viewBox="0 0 ${left + 24 * cw + 4} ${top + 7 * ch + 4}" role="img" aria-label="Heatmap of ${m.label} by hour and weekday">${svg}</svg>
-          <div class="legend" style="margin-top:8px"><span>0%</span><span style="display:inline-block;width:160px;height:10px;border-radius:5px;background:linear-gradient(90deg,rgba(${scaleColor},.06),rgba(${scaleColor},1))"></span><span>${fmt(max)}%</span>
-            <span class="item"><span style="display:inline-block;width:14px;height:12px;border:1.5px solid #1d2125;border-radius:3px"></span>Weekday rush hour (7-9, 16-18)</span>
-            <span class="item">Numbers show the darker cells</span></div>
-          <p class="howto">Each cell pools every 5-minute poll in that hour over the 3 weeks of data for the ${ids.length} filtered stations. Dark weekday 7-9 AM and 4-6 PM cells are the predictable rush-hour pattern. Try one district at a time: Northside and Eastside empty in the morning, Downtown fills.</p>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-h"><h2>Stockout and fullout log</h2>
-          <div class="row small">
-            <label>Type <select id="ev-kind"><option value="all">All</option><option value="stockout" ${S.eventKind === "stockout" ? "selected" : ""}>Stockouts (0 bikes)</option><option value="fullout" ${S.eventKind === "fullout" ? "selected" : ""}>Fullouts (0 docks)</option></select></label>
-            <label>Sort <select id="ev-sort"><option value="start">Newest first</option><option value="duration" ${S.eventSort === "duration" ? "selected" : ""}>Longest first</option><option value="station" ${S.eventSort === "station" ? "selected" : ""}>Station</option></select></label>
-          </div></div>
-        <div class="card-b row small"><span class="badge">${markerSvg("empty", 5)} ${nStock} stockouts</span><span class="badge">${markerSvg("full", 5)} ${nFull} fullouts</span><span class="badge">${dur(totalMin)} unusable in total</span><span class="muted">up to ${esc(shortTime(now))}</span></div>
-        <div class="table-wrap"><table><thead><tr><th>Station</th><th>District</th><th>Type</th><th>Start</th><th class="num">Duration</th></tr></thead><tbody>
-          ${pageRows.map((e) => `<tr><td>${esc(stName(e.station))}</td><td>${esc(stationInfo(e.station).district)}</td><td>${e.kind === "stockout" ? catBadge("empty").replace(CAT_LABEL.empty, "Stockout") : catBadge("full").replace(CAT_LABEL.full, "Fullout")}</td>
-            <td class="mono">${esc(shortTime(e.start))}</td><td class="num">${dur(e.shown)}${e.ongoingNow ? ' <span class="badge warn">ongoing</span>' : ""}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">No events for these filters.</td></tr>`}
-        </tbody></table></div>
-        <div class="card-b row" style="justify-content:space-between"><span class="small muted">${evs.length} events · page ${S.eventPage + 1} of ${pages}</span>
-          <span class="row"><button id="ev-prev" ${S.eventPage === 0 ? "disabled" : ""}>Previous</button><button id="ev-next" ${S.eventPage >= pages - 1 ? "disabled" : ""}>Next</button></span></div>
-        <p class="howto" style="margin:0 14px 12px">An episode starts at the first poll a station reports 0 rentable bikes (stockout) or 0 open docks (fullout) and ends at the first poll it does not. Durations are in 5-minute steps; "ongoing" means it had not ended by the snapshot time.</p>
-      </div>
-    </div></div>`;
-  bindFilters(el);
-  $("#filter-count").textContent = `${ids.length} of ${snapData().stations.length} stations included`;
-  $("#heat-metric").onchange = (e) => { S.heatMetric = e.target.value; render(); };
-  $("#ev-kind").onchange = (e) => { S.eventKind = e.target.value; S.eventPage = 0; render(); };
-  $("#ev-sort").onchange = (e) => { S.eventSort = e.target.value; S.eventPage = 0; render(); };
-  $("#ev-prev").onclick = () => { S.eventPage--; render(); };
-  $("#ev-next").onclick = () => { S.eventPage++; render(); };
+  // hour labels sit on the grid lines (the start of each hour), not on the blocks
+  for (let h = 0; h <= 24; h++) {
+    const x = left + h * cw;
+    svg += `<line x1="${x}" x2="${x}" y1="${top - 6}" y2="${top + 7 * ch}" stroke="#b8bfc7" stroke-width="${h % 6 === 0 ? 1.2 : .6}"/>
+      <text x="${x}" y="${top - 10}" text-anchor="middle">${h}</text>`;
+  }
+  return `<div class="card">
+    <div class="card-h"><h2>Rush-hour heatmap · hour × day of week</h2>
+      <label class="row small">Metric <select id="heat-metric">${Object.entries(HEAT).map(([k, v]) => `<option value="${k}" ${k === S.heatMetric ? "selected" : ""}>${v.label}</option>`).join("")}</select></label></div>
+    <div class="card-b">
+      <svg class="heat" viewBox="0 0 ${left + 24 * cw + 12} ${top + 7 * ch + 4}" role="img" aria-label="Heatmap of ${m.label} by hour and weekday">${svg}</svg>
+      <div class="legend" style="margin-top:8px"><span>0%</span><span style="display:inline-block;width:160px;height:10px;border-radius:5px;background:linear-gradient(90deg,rgba(${rgb},.06),rgba(${rgb},1))"></span><span>${fmt(max)}%</span>
+        <span class="item">Hour labels mark where each hour starts · numbers show the darker cells</span></div>
+      <p class="howto">Each cell pools every 5-minute poll in that hour over the 3 weeks of data for the ${ids.length} filtered stations. Try one district at a time: South Boston, Jamaica Plain and Charlestown empty in the morning, Downtown and Back Bay fill.</p>
+    </div>
+  </div>`;
 }
 
-// --------------------------------------------------------------- Dock Health
-function pageDocks(el) {
+// ------------------------------------------- Maintenance (with Dock Health)
+function pctKpi(cls, pct, line2, label) {
+  return `<div class="card kpi ${cls}"><div class="v">${pct === null ? "—" : `${fmt(pct, 1)}%`}</div><div class="v2">${line2}</div><div class="l">${label}</div></div>`;
+}
+function pageMaintenanceAll(el) {
   const snap = snapData();
-  const rows = snap.stations.map((r) => ({ r, s: stationInfo(r.id), d: snap.docks[r.id] }));
-  rows.sort((a, b) => (!!b.r.misleading - !!a.r.misleading) || (b.r.docks_disabled - a.r.docks_disabled) || a.r.id.localeCompare(b.r.id));
-  const brokenDocks = rows.reduce((a, x) => a + x.r.docks_disabled, 0);
-  const brokenBikes = rows.reduce((a, x) => a + x.r.bikes_disabled, 0);
+  const m = snap.maintenance;
+  const rows = snap.stations.map((r) => ({ r, s: stationInfo(r.id), d: snap.docks[r.id], reps: m.repair_counts[r.id] || 0 }));
+  rows.sort((a, b) => (!!b.r.misleading - !!a.r.misleading) || (b.r.docks_disabled - a.r.docks_disabled) || (b.reps - a.reps) || a.r.id.localeCompare(b.r.id));
   const total = rows.reduce((a, x) => a + x.s.total_docks, 0);
+  const brokenDocks = rows.reduce((a, x) => a + x.r.docks_disabled, 0);
+  const bikes = rows.reduce((a, x) => a + x.r.bikes_available + x.r.bikes_disabled, 0);
+  const brokenBikes = rows.reduce((a, x) => a + x.r.bikes_disabled, 0);
   const flagged = rows.filter((x) => x.r.misleading).length;
-  const dockLegend = `<div class="legend">${Object.entries(DOCK_STATES).map(([k, [lab, sym]]) => `<span class="item"><span class="dock ${k}" aria-hidden="true">${sym}</span>${lab}</span>`).join("")}</div>`;
+  const thr = m.repeat_threshold;
+  const repeat = rows.filter((x) => x.reps >= thr).length;
+  const n = rows.length;
+  const p = (a, b) => (b ? (100 * a) / b : null);
+  const maxRep = Math.max(1, ...rows.map((x) => x.reps));
+  const dockLegend = `<div class="legend">${Object.entries(DOCK_STATES).map(([k, [lab, sym]]) => `<span class="item"><span class="dock ${k}" aria-hidden="true">${sym}</span>${lab}</span>`).join("")}<span class="item"><b style="color:#8a5200">⚠</b> Misleading fill</span></div>`;
   el.innerHTML = `<div class="stack">
-    <div class="grid cols-4">
-      <div class="card kpi"><div class="v">${brokenDocks}</div><div class="l">broken docks (of ${total})</div></div>
-      <div class="card kpi"><div class="v">${brokenBikes}</div><div class="l">broken bikes sitting in docks</div></div>
-      <div class="card kpi"><div class="v">${total - brokenDocks}</div><div class="l">effective network capacity (docks)</div></div>
-      <div class="card kpi"><div class="v">${flagged}</div><div class="l">stations with misleading fill</div></div>
+    <div class="grid cols-5">
+      ${pctKpi("kpi-red", p(brokenDocks, total), `${brokenDocks} of ${total} docks`, "broken docks")}
+      ${pctKpi("kpi-amber", p(brokenBikes, bikes), `${brokenBikes} of ${bikes} docked bikes`, "broken bikes in docks")}
+      ${pctKpi("kpi-green", p(total - brokenDocks, total), `${total - brokenDocks} of ${total} docks`, "effective capacity (usable docks)")}
+      ${pctKpi("kpi-amber", p(flagged, n), `${flagged} of ${n} stations`, "stations with misleading fill")}
+      ${pctKpi("kpi-purple", p(repeat, n), `${repeat} of ${n} stations`, `repeat offenders (${fmt(thr, 0)}+ unplanned repairs)`)}
+    </div>
+    <div class="grid cols-3">
+      <div class="card kpi"><div class="v">${m.mttr_min === null ? "—" : dur(m.mttr_min)}</div><div class="l">mean time to repair (opened → resolved, ${m.mttr_n} unplanned repairs)</div></div>
+      <div class="card kpi"><div class="v">${m.backlog}</div><div class="l">backlog: repair tickets open now</div></div>
+      <div class="card kpi"><div class="v">${m.backlog_unassigned}</div><div class="l">open and not yet assigned</div></div>
     </div>
     <div class="card">
-      <div class="card-h"><h2>Per-dock status at ${esc(shortTime(snap.time))}</h2>${dockLegend}</div>
+      <div class="card-h"><h2>Dock health at ${esc(shortTime(snap.time))}</h2>${dockLegend}</div>
       <div class="table-wrap" style="max-height:none"><table>
-        <thead><tr><th>Station</th><th class="num">Total</th><th class="num">Broken docks</th><th class="num">Effective cap.</th><th class="num">Bikes (broken)</th><th class="num">Fill: total docks</th><th class="num">Fill: effective</th><th>Docks</th><th>Flag</th></tr></thead>
-        <tbody>${rows.map(({ r, s, d }) => {
-          const bikes = r.bikes_available + r.bikes_disabled;
-          const naive = s.total_docks ? (100 * bikes) / s.total_docks : null;
-          return `<tr><td><b>${esc(r.id)}</b> ${esc(s.name)}<div class="small muted">${esc(s.district)}${r.status !== "active" ? ` · ${STATUS_LABEL[r.status]}` : ""}</div></td>
+        <thead><tr><th>Station</th><th class="num">Total</th><th class="num">Broken docks</th><th class="num">Effective cap.</th><th class="num">Bikes (broken)</th><th>Docks</th><th>Repeat-offender report<div class="small muted" style="font-weight:400">unplanned repairs so far</div></th></tr></thead>
+        <tbody>${rows.map(({ r, s, d, reps }) => `<tr>
+            <td><span class="hazard">${r.misleading ? `<span class="warn-icon" data-tip="${esc(FLAG_LABEL[r.misleading])}" aria-label="${esc(FLAG_LABEL[r.misleading])}">⚠</span>` : ""}</span><b>${esc(r.id)}</b> ${esc(s.name)}<div class="small muted indent">${esc(s.district)}${r.status !== "active" ? ` · ${STATUS_LABEL[r.status]}` : ""}</div></td>
             <td class="num">${s.total_docks}</td><td class="num">${r.docks_disabled}</td><td class="num">${r.eff}</td>
-            <td class="num">${bikes} (${r.bikes_disabled})</td><td class="num">${fmt(naive)}%</td><td class="num"><b>${fmt(r.fill_pct)}%</b></td>
+            <td class="num">${r.bikes_available + r.bikes_disabled} (${r.bikes_disabled})</td>
             <td><div class="docks">${d.grid.map((g, i) => `<span class="dock ${g}" data-tip="Dock ${i + 1}: ${DOCK_STATES[g][0]}" aria-label="Dock ${i + 1}: ${DOCK_STATES[g][0]}">${DOCK_STATES[g][1]}</span>`).join("")}</div>
               ${d.mismatch ? `<div class="small" style="color:#8a5200">Feed reports ${d.feed_broken} broken, dock log shows ${d.fault_log_broken}${r.feed_age_min > S.data.meta.stale_min ? " (feed is stale)" : ""}</div>` : ""}</td>
-            <td>${r.misleading ? `<span class="badge warn" data-tip="${esc(FLAG_LABEL[r.misleading])}">⚠ ${esc(FLAG_LABEL[r.misleading])}</span>` : `<span class="muted small">—</span>`}</td></tr>`;
-        }).join("")}</tbody></table></div>
-      <p class="howto" style="margin:0 14px 12px">Effective capacity = total docks − broken docks. "Fill: total docks" is what a naive count shows; "Fill: effective" is the truth. A flag means broken docks or bikes make the station look fuller or emptier than it really is. Dock order is schematic: broken docks come from the dock fault log, bikes fill the working docks.</p>
+            <td class="repeat"><div class="row" style="gap:8px;flex-wrap:nowrap"><b class="num" style="min-width:18px">${reps}</b><div class="loadbar" style="flex:1;min-width:60px"><div style="width:${(100 * reps) / maxRep}%;background:${reps >= thr ? "var(--full)" : "var(--line-2)"}"></div></div>${reps >= thr ? `<span class="badge purple">repeat</span>` : ""}</div></td></tr>`).join("")}</tbody></table></div>
+      <p class="howto" style="margin:0 14px 12px">Effective capacity = total docks − broken docks. ⚠ = broken docks or bikes make the station look fuller or emptier than it is (hover for which). Repeat offenders have at least ${fmt(thr, 0)} unplanned repair tickets (dock faults, offline or broken kiosks, silent feeds) since the data began: 3 or more, and at least twice the network median of ${fmt(thr / 2, 1)}. Dock order is schematic: broken docks come from the dock fault log, bikes fill the working docks.</p>
     </div></div>`;
 }
 
-// ------------------------------------------------------------- Forecast
-function pageForecast(el) {
-  const fc = snapData().forecast;
-  const risky = fc.filter((i) => i.urgency > 0);
-  const when = (i) => (i.urgency === 3 ? "Now" : i.urgency === 2 ? "≤ 30 min" : "30-60 min");
-  const check = (i) => {
-    const pred = i.risk30 || i.risk_now ? (i.risk30 || i.risk_now) : i.risk60;
-    const act = i.urgency >= 2 ? i.actual30 : i.actual60;
-    if (!act) return "—";
-    const hit = act === pred;
-    return `<span class="badge ${hit ? "ok" : ""}">${hit ? "✓ happened" : `✗ was ${act}`}</span>`;
-  };
-  const scored = risky.filter((i) => (i.urgency >= 2 ? i.actual30 : i.actual60));
-  const hits = scored.filter((i) => (i.urgency >= 2 ? i.actual30 : i.actual60) === (i.risk_now || i.risk30 || i.risk60)).length;
-  el.innerHTML = `<div class="stack">
-    <div class="grid cols-4">
-      <div class="card kpi"><div class="v">${risky.filter((i) => i.urgency === 3).length}</div><div class="l">empty or full now</div></div>
-      <div class="card kpi"><div class="v">${risky.filter((i) => i.urgency === 2).length}</div><div class="l">projected to hit within 30 min</div></div>
-      <div class="card kpi"><div class="v">${risky.filter((i) => i.urgency === 1).length}</div><div class="l">projected to hit in 30-60 min</div></div>
-      <div class="card kpi"><div class="v">${scored.length ? `${hits}/${scored.length}` : "—"}</div><div class="l">flags that came true (checked against the replay)</div></div>
-    </div>
-    <div class="card">
-      <div class="card-h"><h2>At-risk stations · ranked by urgency, then expected impact</h2>${fillLegend()}</div>
-      <div class="table-wrap" style="max-height:none"><table><thead><tr><th class="num">Rank</th><th>Station</th><th>Risk</th><th>When</th><th class="num">Bikes now / eff.</th><th class="num">Projected +30</th><th class="num">Projected +60</th><th class="num">Impact (bikes/h)</th><th>Check</th></tr></thead>
-      <tbody>${risky.map((i) => `<tr><td class="num">${i.rank}</td><td>${esc(stName(i.id))}<div class="small muted">${esc(stationInfo(i.id).district)}</div></td>
-        <td>${catBadge(i.risk === "empty" ? "empty" : "full")}</td><td>${when(i)}</td><td class="num">${i.bikes} / ${i.eff}</td>
-        <td class="num">${fmt(i.p30, 1)}</td><td class="num">${fmt(i.p60, 1)}</td><td class="num">${fmt(i.impact_bikes, 1)}</td><td>${check(i)}</td></tr>`).join("") || `<tr><td colspan="9" class="muted">No station is projected to hit empty or full in the next hour.</td></tr>`}
-      </tbody></table></div>
-      <div class="card-b">
-        <div class="formula">projected bikes(+m) = bikes now + [avg fill at this weekday & time +m − avg fill now] × effective capacity</div>
-        <p class="howto">Simple approach: the averages come from the same weekday and time of day (±10 min) in the earlier weeks only, so the forecast never peeks ahead. A station is at risk when the projection comes within 10% of capacity (at least 1) of 0 bikes (empty) or of 0 open docks (full). Impact is how many bikes the average flow moves at that station over the next hour. "Check" compares each flag with what actually happened in the replay.</p>
-      </div>
-    </div></div>`;
-}
-
-// --------------------------------------------------------------- Dispatch
+// ------------------------------------------------- Dispatch (with Forecast)
+const HORIZONS = [30, 60, 90, 120];
+const hLabel = (m) => (m === 0 ? "Now" : m < 60 ? `≤ ${m} min` : `≤ ${m / 60} h`);
 function saveLocal() { store.set("local", S.local); }
 function localKey(id) { return `${S.datasetId}|${S.snap}|${id}`; }
-function pageDispatch(el) {
+function kmBetween(a, b) {
+  const R = 6371, p1 = (a.lat * Math.PI) / 180, p2 = (b.lat * Math.PI) / 180;
+  const dp = p2 - p1, dl = ((b.lon - a.lon) * Math.PI) / 180;
+  const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function manualTasks() { return (S.local.manual ||= {})[localKey("manual")] ||= []; }
+// vans already given a not-yet-confirmed task in this browser
+function busyVans(moves) {
+  const busy = new Set();
+  moves.forEach((m, k) => { const key = localKey(`move${k}`); if (S.local.assigned[key] && !S.local.done[key]) busy.add(S.local.assigned[key]); });
+  manualTasks().forEach((t) => { if (!S.local.done[localKey(t.id)]) busy.add(t.van); });
+  return busy;
+}
+// available vans for a pickup: idle (not on a job), not already given a task here,
+// with room for the bikes; nearest to the pickup first
+function vanChoices(pickupId, bikes, busy) {
+  const p = stationInfo(pickupId);
+  return snapData().vans.map((v) => ({ v, km: kmBetween(v, p), room: v.capacity - v.load,
+    why: v.status !== "idle" ? `${v.status}${v.station !== "depot" ? ` at ${v.station}` : ""}` : busy.has(v.van) ? "already assigned" : v.capacity - v.load < bikes ? `only ${v.capacity - v.load} bikes of room` : "" }))
+    .map((c) => ({ ...c, ok: !c.why })).sort((a, b) => b.ok - a.ok || a.km - b.km);
+}
+function vanSelect(attr, choices) {
+  const ok = choices.filter((c) => c.ok);
+  if (!ok.length) return `<span class="badge bad">No van available</span>`;
+  return `<select ${attr} aria-label="Van">${ok.map((c, i) => `<option value="${c.v.van}" ${i === 0 ? "selected" : ""}>${esc(c.v.name)} · ${fmt(c.km, 1)} km away · room ${c.room}${i === 0 ? " (suggested)" : ""}</option>`).join("")}</select>`;
+}
+
+function pageDispatchAll(el) {
   const snap = snapData();
+  const fc = snap.forecast;
+  const risky = fc.filter((i) => i.urgency > 0);
+  const firstH = (i) => (i.urgency === 5 ? 0 : i.minutes_to_hit);
+  const actualAt = (i) => (i.urgency === 5 ? i.actual30 : i.minutes_to_hit ? i[`actual${i.minutes_to_hit}`] : null);
+  const check = (i) => {
+    const act = actualAt(i);
+    if (!i.risk || !act) return "—";
+    return act === i.risk ? `<span class="badge ok">✓ happened</span>` : `<span class="badge">✗ was ${esc(act)}</span>`;
+  };
+  const scored = risky.filter((i) => actualAt(i));
+  const hits = scored.filter((i) => actualAt(i) === i.risk).length;
+  const PRI = { high: ["High", "bad"], medium: ["Medium", "warn"], low: ["Low", ""], none: ["—", ""] };
+
   const orders = Object.fromEntries(S.data.orders.map((o) => [o.id, o]));
   const vans = snap.vans;
+  const busy = busyVans(snap.moves);
   const moveCards = snap.moves.map((m, k) => {
     const key = localKey(`move${k}`);
     const assigned = S.local.assigned[key];
@@ -447,91 +466,121 @@ function pageDispatch(el) {
       <div class="row small"><span class="badge">${markerSvg("empty", 5)} Drop off</span>${esc(stName(m.to))}</div>
       <div class="small muted">${esc(m.reason)}</div>
       <div class="row">${assigned ? `<span class="badge ok">Assigned to ${esc(assigned)}</span><button data-unassign="${key}">Undo</button>` :
-        `<select data-van="${key}" aria-label="Van">${vans.map((v) => `<option value="${v.van}">${v.name} (${v.status})</option>`).join("")}</select><button class="primary" data-assign="${key}">Assign</button>`}</div>
+        `${vanSelect(`data-van="${key}"`, vanChoices(m.from, m.bikes, busy))}${vanChoices(m.from, m.bikes, busy).some((c) => c.ok) ? `<button class="primary" data-assign="${key}">Assign</button>` : ""}`}</div>
     </div>`;
   }).join("") || `<p class="muted">No moves needed: no station is projected far enough above or below half full.</p>`;
+
+  // manual rebalancing form
+  const active = snap.stations.filter((r) => r.status === "active");
+  const D = (S.manualDraft ||= { from: "", to: "", bikes: 1 });
+  if (!active.some((r) => r.id === D.from)) D.from = (active.find((r) => r.bikes_available > 0) || active[0] || {}).id || "";
+  if (!active.some((r) => r.id === D.to) || D.to === D.from) D.to = (active.find((r) => r.docks_available > 0 && r.id !== D.from) || {}).id || "";
+  const fromRow = rowFor(D.from), toRow = rowFor(D.to);
+  const maxBikes = Math.max(0, Math.min(fromRow ? fromRow.bikes_available : 0, toRow ? toRow.docks_available : 0));
+  const formChoices = D.from ? vanChoices(D.from, D.bikes, busy) : [];
+  const problems = [];
+  if (D.from && D.from === D.to) problems.push("pick-up and drop-off must be different stations");
+  if (fromRow && D.bikes > fromRow.bikes_available) problems.push(`${D.from} has only ${fromRow.bikes_available} rentable bikes`);
+  if (toRow && D.bikes > toRow.docks_available) problems.push(`${D.to} has only ${toRow.docks_available} open docks`);
+  if (!(D.bikes >= 1)) problems.push("move at least 1 bike");
+  if (!formChoices.some((c) => c.ok)) problems.push("no van is free with enough room");
+  const stOpt = (sel, fn) => active.map((r) => `<option value="${r.id}" ${r.id === sel ? "selected" : ""}>${esc(stName(r.id))} · ${fn(r)}</option>`).join("");
+  const form = `<div class="card"><div class="card-h"><h2>Create a rebalancing task</h2><span class="small muted">vans offered: idle, not already assigned, with room for the bikes; nearest first</span></div>
+    <div class="card-b manual-form">
+      <label>Pick-up station<select id="mf-from">${stOpt(D.from, (r) => `${r.bikes_available} bikes`)}</select></label>
+      <label>Drop-off station<select id="mf-to">${stOpt(D.to, (r) => `${r.docks_available} open docks`)}</select></label>
+      <label>Bikes<input type="number" id="mf-bikes" min="1" max="${Math.max(1, maxBikes)}" value="${D.bikes}"></label>
+      <label>Van${vanSelect('id="mf-van"', formChoices)}</label>
+      <button class="primary" id="mf-create" ${problems.length ? "disabled" : ""}>Create task</button>
+      ${problems.length ? `<p class="small" style="color:#a51d16;grid-column:1/-1;margin:0">Can't create yet: ${esc(problems.join("; "))}.</p>` : `<p class="small muted" style="grid-column:1/-1;margin:0">Up to ${maxBikes} bikes fit (rentable bikes at the pick-up and open docks at the drop-off).</p>`}
+    </div></div>`;
+
   const repairTasks = snap.tasks.repair.map((id) => orders[id]);
   const rebalTasks = snap.tasks.rebalance.map((id) => orders[id]);
   const assignedMoves = snap.moves.map((m, k) => ({ m, key: localKey(`move${k}`) })).filter((x) => S.local.assigned[x.key]);
+  const doneBtn = (key) => (S.local.done[key] ? `<span class="badge ok">Completed (confirmed)</span> <button data-undone="${key}">Undo</button>` : `<button data-done="${key}">Confirm complete</button>`);
   const taskCard = (o) => {
     const key = localKey(o.id);
-    const done = S.local.done[key];
     const status = o.arrived <= snap.time ? "on site" : o.assigned <= snap.time ? "en route" : "open";
-    return `<div class="task ${done ? "done" : ""}"><div class="row" style="justify-content:space-between"><b>${esc(o.id)} · ${esc(stName(o.station))}</b><span class="badge">${status}</span></div>
+    return `<div class="task ${S.local.done[key] ? "done" : ""}"><div class="row" style="justify-content:space-between"><b>${esc(o.id)} · ${esc(stName(o.station))}</b><span class="badge">${status}</span></div>
       <div class="small muted">${esc(o.fault.replace(/_/g, " "))} · opened ${esc(o.opened.slice(11))} · ${esc(o.van)}${o.bikes_moved ? ` · ${o.bikes_moved} bikes` : ""} · open ${dur(minsBetween(o.opened, snap.time))}</div>
-      <div>${done ? `<span class="badge ok">Completed (confirmed)</span> <button data-undone="${key}">Undo</button>` : `<button data-done="${key}">Confirm complete</button>`}</div></div>`;
+      <div>${doneBtn(key)}</div></div>`;
   };
+  const localCard = (title, sub, key, van) => `<div class="task ${S.local.done[key] ? "done" : ""}"><div class="row" style="justify-content:space-between"><b>${title}</b><span class="badge">${esc(van)}</span></div>
+      <div class="small muted">${sub}</div><div>${doneBtn(key)}</div></div>`;
+  const rebalCount = rebalTasks.length + assignedMoves.length + manualTasks().length;
   const queue = S.queueTab === "repair"
     ? repairTasks.map(taskCard).join("") || `<p class="muted">No open repair tasks.</p>`
-    : (rebalTasks.map(taskCard).join("") + assignedMoves.map(({ m, key }) => {
-      const done = S.local.done[key];
-      return `<div class="task ${done ? "done" : ""}"><div class="row" style="justify-content:space-between"><b>Move ${m.bikes} bikes ${esc(m.from)} → ${esc(m.to)}</b><span class="badge">${esc(S.local.assigned[key])}</span></div>
-        <div class="small muted">from the recommendations · ${fmt(m.km, 1)} km</div>
-        <div>${done ? `<span class="badge ok">Completed (confirmed)</span> <button data-undone="${key}">Undo</button>` : `<button data-done="${key}">Confirm complete</button>`}</div></div>`;
-    }).join("")) || `<p class="muted">No open rebalancing tasks.</p>`;
+    : (rebalTasks.map(taskCard).join("")
+      + assignedMoves.map(({ m, key }) => localCard(`Move ${m.bikes} bikes ${esc(m.from)} → ${esc(m.to)}`, `recommended move · ${fmt(m.km, 1)} km`, key, S.local.assigned[key])).join("")
+      + manualTasks().map((t) => localCard(`Move ${t.bikes} bikes ${esc(t.from)} → ${esc(t.to)}`, `manual task · ${fmt(t.km, 1)} km`, localKey(t.id), t.van)).join(""))
+      || `<p class="muted">No open rebalancing tasks.</p>`;
   const vanCards = vans.map((v) => {
-    const extra = assignedMoves.filter((x) => S.local.assigned[x.key] === v.van && !S.local.done[x.key]);
-    return `<div class="task"><div class="row" style="justify-content:space-between"><b>${esc(v.name)}</b><span class="badge ${v.status === "idle" ? "" : "ok"}">${esc(v.status)}</span></div>
+    const mine = [...assignedMoves.filter((x) => S.local.assigned[x.key] === v.van && !S.local.done[x.key]).map(() => "new move"),
+      ...manualTasks().filter((t) => t.van === v.van && !S.local.done[localKey(t.id)]).map((t) => t.id)];
+    const free = v.status === "idle" && !busy.has(v.van);
+    return `<div class="task"><div class="row" style="justify-content:space-between"><b>${esc(v.name)}</b><span class="badge ${free ? "ok" : "warn"}">${free ? "available" : busy.has(v.van) && v.status === "idle" ? "assigned" : esc(v.status)}</span></div>
       <div class="small muted">${v.station === "depot" ? "At depot" : `At / heading to ${esc(stName(v.station))}`}</div>
       <div class="small">Load ${v.load} / ${v.capacity} bikes</div><div class="loadbar" aria-hidden="true"><div style="width:${(100 * v.load) / v.capacity}%"></div></div>
-      <div class="small muted">Queue: ${[...v.queue, ...extra.map((x) => "new move")].join(", ") || "empty"}</div></div>`;
+      <div class="small muted">Queue: ${[...v.queue, ...mine].join(", ") || "empty"}</div></div>`;
   }).join("");
   const res = snap.resolution;
+  const nFree = vans.filter((v) => v.status === "idle" && !busy.has(v.van)).length;
+
   el.innerHTML = `<div class="stack">
+    <div class="grid cols-5">
+      <div class="card kpi kpi-red"><div class="v">${risky.filter((i) => i.urgency === 5).length}</div><div class="l">empty or full now</div></div>
+      <div class="card kpi kpi-red"><div class="v">${risky.filter((i) => i.urgency === 4).length}</div><div class="l">projected to hit within 30 min</div></div>
+      <div class="card kpi kpi-amber"><div class="v">${risky.filter((i) => i.urgency === 3).length}</div><div class="l">within 1 hour</div></div>
+      <div class="card kpi kpi-amber"><div class="v">${risky.filter((i) => i.urgency <= 2).length}</div><div class="l">within 1.5-2 hours</div></div>
+      <div class="card kpi"><div class="v">${scored.length ? `${hits}/${scored.length}` : "—"}</div><div class="l">flags that came true (checked against the replay)</div></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Forecast & at-risk stations · ranked by priority, then expected impact</h2>
+        <div class="legend"><span class="item"><span class="swatch risk-high"></span>High priority (now or ≤ 30 min)</span><span class="item"><span class="swatch risk"></span>At risk within 2 h</span></div></div>
+      <div class="table-wrap"><table class="forecast"><thead><tr><th class="num">Rank</th><th>Station</th><th>Priority</th><th>Risk</th><th>When</th><th class="num">Bikes now / eff.</th>${HORIZONS.map((m) => `<th class="num">+${m < 60 ? `${m} min` : `${m / 60} h`}</th>`).join("")}<th class="num">Impact (bikes)</th><th>Check</th></tr></thead>
+      <tbody>${fc.map((i) => `<tr class="${i.priority === "high" ? "risk-high" : i.urgency > 0 ? "risk" : ""}"><td class="num">${i.rank}</td><td>${esc(stName(i.id))}<div class="small muted">${esc(stationInfo(i.id).district)}</div></td>
+        <td><span class="badge ${PRI[i.priority][1]}">${PRI[i.priority][0]}</span></td><td>${i.risk ? catBadge(i.risk === "empty" ? "empty" : "full") : `<span class="muted small">—</span>`}</td><td>${i.urgency ? hLabel(firstH(i)) : "—"}</td><td class="num">${i.bikes} / ${i.eff}</td>
+        ${HORIZONS.map((m) => `<td class="num ${i[`risk${m}`] ? "hit" : ""}">${fmt(i[`p${m}`], 1)}</td>`).join("")}<td class="num">${fmt(i.impact_bikes, 1)}</td><td>${check(i)}</td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="card-b">
+        <div class="formula">projected bikes(+m) = bikes now + [avg fill at this weekday & time +m − avg fill now] × effective capacity, for m = 30 min, 1 h, 1.5 h, 2 h</div>
+        <p class="howto">Averages come from the same weekday and time (±10 min) in earlier weeks only. A station is at risk when a projection comes within 10% of capacity (at least 1 bike) of empty or full; bold red projections are the ones that trigger it. Rank = priority (sooner first), then impact: how many bikes the average flow moves by then.</p>
+      </div>
+    </div>
     <div class="grid cols-4">
       <div class="card kpi"><div class="v">${snap.moves.length}</div><div class="l">recommended moves</div></div>
-      <div class="card kpi"><div class="v">${repairTasks.length + rebalTasks.length}</div><div class="l">open tasks (${repairTasks.length} repair · ${rebalTasks.length} rebalancing)</div></div>
+      <div class="card kpi"><div class="v">${repairTasks.length + rebalCount}</div><div class="l">open tasks (${repairTasks.length} repair · ${rebalCount} rebalancing)</div></div>
+      <div class="card kpi"><div class="v">${nFree} / ${vans.length}</div><div class="l">vans available now</div></div>
       <div class="card kpi"><div class="v">${res.rebalance.median_min === null ? "—" : dur(res.rebalance.median_min)}</div><div class="l">median time to resolve a rebalance (${res.rebalance.n} done)</div></div>
-      <div class="card kpi"><div class="v">${res.repair.median_min === null ? "—" : dur(res.repair.median_min)}</div><div class="l">median time to resolve a repair (${res.repair.n} done)</div></div>
     </div>
+    ${form}
     <div class="grid dispatch">
       <div class="card"><div class="card-h"><h2>Recommended pickup → drop-off</h2></div><div class="card-b">${moveCards}
-        <p class="howto">Stations projected above 80% full in an hour give bikes down to half full; stations projected below 20% get bikes up to half full, from the nearest donor first (at most 16 bikes a trip).</p></div></div>
+        <p class="howto">Stations projected above 80% full in an hour give bikes down to half full; stations projected below 20% get bikes up to half full, from the nearest donor first (at most 16 bikes a trip). Only available vans are offered, nearest to the pick-up first.</p></div></div>
       <div class="card"><div class="card-h"><h2>Task queue</h2></div>
-        <div class="tabs" role="tablist"><button role="tab" aria-selected="${S.queueTab === "repair"}" data-qtab="repair">Repair (${repairTasks.length})</button><button role="tab" aria-selected="${S.queueTab === "rebalance"}" data-qtab="rebalance">Rebalancing (${rebalTasks.length + assignedMoves.length})</button></div>
+        <div class="tabs" role="tablist"><button role="tab" aria-selected="${S.queueTab === "repair"}" data-qtab="repair">Repair (${repairTasks.length})</button><button role="tab" aria-selected="${S.queueTab === "rebalance"}" data-qtab="rebalance">Rebalancing (${rebalCount})</button></div>
         <div class="card-b list">${queue}</div></div>
       <div class="card"><div class="card-h"><h2>Van status</h2></div><div class="card-b list">${vanCards}
-        <p class="howto">Assignments and confirmations are saved in this browser only.</p></div></div>
+        <p class="howto">A van is available when it is idle and not already given a task here. Assignments, manual tasks and confirmations are saved in this browser only.</p></div></div>
     </div></div>`;
+
   el.querySelectorAll("[data-qtab]").forEach((b) => (b.onclick = () => { S.queueTab = b.dataset.qtab; render(); }));
   el.querySelectorAll("[data-assign]").forEach((b) => (b.onclick = () => { const k = b.dataset.assign; S.local.assigned[k] = el.querySelector(`[data-van="${k}"]`).value; saveLocal(); render(); }));
   el.querySelectorAll("[data-unassign]").forEach((b) => (b.onclick = () => { delete S.local.assigned[b.dataset.unassign]; saveLocal(); render(); }));
   el.querySelectorAll("[data-done]").forEach((b) => (b.onclick = () => { S.local.done[b.dataset.done] = true; saveLocal(); render(); }));
   el.querySelectorAll("[data-undone]").forEach((b) => (b.onclick = () => { delete S.local.done[b.dataset.undone]; saveLocal(); render(); }));
-}
-
-// ------------------------------------------------------------ Maintenance
-function pageMaintenance(el) {
-  const snap = snapData();
-  const now = snap.time;
-  const m = snap.maintenance;
-  const station = S.ticketStation || "all";
-  const tickets = S.data.orders.filter((o) => o.type === "repair" && o.opened <= now && (station === "all" || o.station === station))
-    .map((o) => ({ ...o, status: o.resolved <= now ? "resolved" : o.assigned <= now ? (o.arrived <= now ? "in progress" : "assigned") : "opened" }))
-    .sort((a, b) => b.opened.localeCompare(a.opened));
-  const maxRep = Math.max(1, ...m.repeat_offenders.map((r) => r.repairs));
-  el.innerHTML = `<div class="stack">
-    <div class="grid cols-4">
-      <div class="card kpi"><div class="v">${m.mttr_min === null ? "—" : dur(m.mttr_min)}</div><div class="l">mean time to repair (opened → resolved, ${m.mttr_n} unplanned repairs)</div></div>
-      <div class="card kpi"><div class="v">${m.backlog}</div><div class="l">backlog: repair tickets open now</div></div>
-      <div class="card kpi"><div class="v">${m.backlog_unassigned}</div><div class="l">open and not yet assigned</div></div>
-      <div class="card kpi"><div class="v">${m.repeat_offenders.length}</div><div class="l">repeat offenders (3+ unplanned repairs)</div></div>
-    </div>
-    <div class="grid two-one">
-      <div class="card"><div class="card-h"><h2>Fault tickets</h2>
-        <label class="row small">Station history <select id="tk-station"><option value="all">All stations</option>${S.data.stations.map((s) => `<option value="${s.station_id}" ${station === s.station_id ? "selected" : ""}>${s.station_id} ${esc(s.name)}</option>`).join("")}</select></label></div>
-        <div class="table-wrap"><table><thead><tr><th>Ticket</th><th>Station</th><th>Fault</th><th>Opened</th><th>Assigned</th><th>Resolved</th><th>Status</th><th class="num">Time to repair</th></tr></thead><tbody>
-          ${tickets.map((o) => `<tr><td class="mono">${o.id}</td><td>${esc(stName(o.station))}</td><td>${esc(o.fault.replace(/_/g, " "))}</td><td class="mono">${shortTime(o.opened)}</td><td class="mono">${o.assigned <= now ? shortTime(o.assigned) : "—"}</td>
-            <td class="mono">${o.status === "resolved" ? shortTime(o.resolved) : "—"}</td><td><span class="badge ${o.status === "resolved" ? "ok" : "warn"}">${o.status}</span> <span class="small muted">${esc(o.van)}</span></td><td class="num">${o.status === "resolved" ? dur(o.restore_min) : `${dur(minsBetween(o.opened, now))} so far`}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">No tickets.</td></tr>`}
-        </tbody></table></div>
-        <p class="howto" style="margin:0 14px 12px">Tickets opened up to the snapshot time. Time to repair = resolved − opened (response plus time on site). Planned maintenance is listed but not counted as a failure.</p></div>
-      <div class="card"><div class="card-h"><h2>Repeat-offender report</h2></div><div class="card-b">
-        ${m.repeat_offenders.length ? `<table><thead><tr><th>Station</th><th class="num">Repairs</th><th></th></tr></thead><tbody>${m.repeat_offenders.map((r) => `<tr><td><a href="#maintenance" data-st="${r.station}">${esc(stName(r.station))}</a></td><td class="num">${r.repairs}</td>
-          <td style="width:40%"><div class="loadbar"><div style="width:${(100 * r.repairs) / maxRep}%"></div></div></td></tr>`).join("")}</tbody></table>` : `<p class="muted">No station has 3 or more unplanned repairs yet.</p>`}
-        <p class="howto">Unplanned repair tickets (dock faults, offline or broken kiosks, silent feeds) opened since the start of the data. Click a station for its history.</p></div></div>
-    </div></div>`;
-  $("#tk-station").onchange = (e) => { S.ticketStation = e.target.value; render(); };
-  el.querySelectorAll("[data-st]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); S.ticketStation = a.dataset.st; render(); }));
+  $("#mf-from").onchange = (e) => { D.from = e.target.value; render(); };
+  $("#mf-to").onchange = (e) => { D.to = e.target.value; render(); };
+  $("#mf-bikes").onchange = (e) => { D.bikes = Math.max(1, parseInt(e.target.value || "1", 10)); render(); };
+  $("#mf-create").onclick = () => {
+    const van = $("#mf-van")?.value;
+    if (!van || problems.length) return;
+    const list = manualTasks();
+    list.push({ id: `M${String(list.length + 1).padStart(2, "0")}`, from: D.from, to: D.to, bikes: D.bikes, van,
+      km: kmBetween(stationInfo(D.from), stationInfo(D.to)) });
+    saveLocal(); S.queueTab = "rebalance"; render();
+  };
 }
 
 // ------------------------------------------------------------- SVG charts
@@ -540,7 +589,7 @@ function lineChart({ points, w = 960, h = 260, yLabel = "", xLabels = [], lines 
   const ys = points.map((p) => p.y).concat(lines.map((l) => l.y)).concat(stepLimits ? stepLimits.flatMap((s) => [s.ucl, s.lcl]).filter((v) => v !== null) : []);
   let y0 = yMin ?? Math.min(...ys), y1 = yMax ?? Math.max(...ys);
   if (y0 === y1) { y0 -= 1; y1 += 1; }
-  const span = y1 - y0; y0 -= span * .05; y1 += span * .05;
+  const span = y1 - y0; if (yMin === null) y0 -= span * .05; y1 += span * .05;
   const X = (i) => pad.l + (i * (w - pad.l - pad.r)) / Math.max(1, points.length - 1);
   const Y = (v) => pad.t + (h - pad.t - pad.b) * (1 - (v - y0) / (y1 - y0));
   let g = "";
@@ -573,11 +622,11 @@ const chartLegend = `<div class="legend"><span class="item"><svg width="12" heig
 
 // ---------------------------------------------------------- Data Analysis
 function pageAnalysis(el) {
-  if (S.role === "dispatcher") { el.innerHTML = `<div class="card state">The Data Analysis page is for analysts. Switch "View as" to Analyst.</div>`; return; }
-  const tabs = [["fmea", "FMEA"], ["control", "Control Charts"], ["reliability", "Reliability"]];
+  const tabs = [["fmea", "FMEA"], ["control", "Control Charts"]];
   el.innerHTML = `<div class="card"><div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" aria-selected="${S.analysisTab === k}" data-atab="${k}">${l}</button>`).join("")}</div><div class="card-b" id="atab"></div></div>`;
   el.querySelectorAll("[data-atab]").forEach((b) => (b.onclick = () => { S.analysisTab = b.dataset.atab; render(); }));
-  ({ fmea: tabFmea, control: tabControl, reliability: tabReliability })[S.analysisTab]($("#atab"));
+  if (!["fmea", "control"].includes(S.analysisTab)) S.analysisTab = "fmea";
+  ({ fmea: tabFmea, control: tabControl })[S.analysisTab]($("#atab"));
 }
 
 function fmeaRows() {
@@ -636,15 +685,15 @@ function tabFmea(el) {
 function tabControl(el) {
   const scopes = Object.keys(S.data.xbar);
   const xb = S.data.xbar[S.xbarScope] || S.data.xbar.network;
-  const xLabels = DOW.map((d, i) => [i * 24, d]);
+  const xLabels = xb.points.map((p, i) => [i, p.label]).filter(([, lab]) => lab.startsWith("Mon"));
   const scopeLabel = (k) => (k === "network" ? "Whole network" : k.startsWith("district:") ? `District: ${k.slice(9)}` : `Station ${stName(k)}`);
+  const nStations = S.xbarScope === "network" ? S.data.stations.length : S.xbarScope.startsWith("district:") ? S.data.stations.filter((s) => s.district === S.xbarScope.slice(9)).length : 1;
   const ns = [...new Set(xb.points.map((p) => p.n))];
   const xbOut = xb.points.filter((p) => p.out);
-  const im = S.data.imr;
   const pc = S.data.pchart[S.pWindow];
   const tueCount = pc.points.filter((p) => p.phase === "baseline").length;
   el.innerHTML = `<div class="stack">
-    <div class="card"><div class="card-h"><h2>Hourly averages (X-bar) chart · % of docks open</h2>
+    <div class="card"><div class="card-h"><h2>Daily averages (X-bar) chart · % of docks open</h2>
       <label class="row small">Scope <select id="xb-scope">${scopes.map((k) => `<option value="${k}" ${k === S.xbarScope ? "selected" : ""}>${esc(scopeLabel(k))}</option>`).join("")}</select></label></div>
       <div class="card-b">
         ${xb.message ? `<p class="badge warn">${esc(xb.message)}</p>` : ""}
@@ -652,92 +701,29 @@ function tabControl(el) {
           lines: [{ y: xb.grand_mean, color: "var(--mean)", label: `grand mean ${fmt(xb.grand_mean, 1)}%` }],
           pointTip: (p) => `${p.label}: mean ${fmt(p.mean, 1)}% open (n = ${p.n})\nUCL ${fmt(p.ucl, 1)} · LCL ${fmt(p.lcl, 1)}${p.out ? "\nOUTSIDE LIMITS" : ""}` })}
         ${chartLegend}
-        <div class="grid cols-3" style="margin-top:10px">
+        <div class="grid cols-3 chart-notes">
           <div class="formula">UCL, LCL = X̿ ± 3 · σ_short / √n<br>X̿ = ${fmt(xb.grand_mean, 2)}%<br>σ_short = √(mean of subgroup variances) = ${fmt(xb.sigma_short, 2)}<br>n per subgroup = ${ns.length === 1 ? ns[0] : `${Math.min(...ns)}-${Math.max(...ns)}`}</div>
-          <div class="small"><b>${xbOut.length} of ${xb.points.length}</b> hours outside the limits${xbOut.length ? `, e.g. ${xbOut.slice(0, 6).map((p) => p.label).join(", ")}` : ""}.</div>
-          <p class="howto" style="margin:0">Subgroup = one hour of the week (Mon 08:00, Mon 09:00, ...). Each observation is one station's average % of open docks during that hour in one week (3 weeks × stations in scope). Fill follows a known daily pattern, so the rush hours signal by design: the points outside the limits are the predictable pattern (every Monday morning), not a one-off fault.</p>
-        </div>
-      </div></div>
-    <div class="card"><div class="card-h"><h2>I-MR chart · van response time (response_min from work_orders.csv)</h2></div>
-      <div class="card-b">
-        ${im.message ? `<p class="badge warn">${esc(im.message)}</p>` : ""}
-        ${lineChart({ points: im.points.map((p) => ({ ...p, y: p.x, out: p.out })), phaseSplit: im.n_baseline, yLabel: "response (min)", yMin: Math.min(0, im.lcl),
-          lines: [{ y: im.center, color: "var(--mean)", label: `x̄ ${fmt(im.center, 1)}` }, { y: im.ucl, color: "var(--limit)", label: `UCL ${fmt(im.ucl, 1)}`, dash: "5 3" }, { y: im.lcl, color: "var(--limit)", label: `LCL ${fmt(im.lcl, 1)}`, dash: "5 3" }],
-          pointTip: (p) => `${p.id} (${p.type}) opened ${p.opened}\nresponse ${p.x} min${p.out ? "\nOUTSIDE LIMITS" : ""}` })}
-        ${lineChart({ points: im.points.slice(1).map((p) => ({ ...p, y: p.mr, out: p.mr_out })), h: 170, phaseSplit: im.n_baseline - 1, yLabel: "moving range", yMin: 0,
-          lines: [{ y: im.mrbar, color: "var(--mean)", label: `MR̄ ${fmt(im.mrbar, 1)}` }, { y: im.mr_ucl, color: "var(--limit)", label: `UCL ${fmt(im.mr_ucl, 1)}`, dash: "5 3" }],
-          pointTip: (p) => `${p.id}: moving range ${p.mr} min${p.mr_out ? "\nOUTSIDE LIMITS" : ""}` })}
-        ${chartLegend}
-        <div class="grid cols-3" style="margin-top:10px">
-          <div class="formula">σ = MR̄ / d₂ = ${fmt(im.mrbar, 2)} / 1.128 = ${fmt(im.sigma, 2)}<br>UCL, LCL = x̄ ± 3σ = ${fmt(im.ucl, 1)}, ${fmt(im.lcl, 1)}<br>MR UCL = 3.267 · MR̄ = ${fmt(im.mr_ucl, 1)}</div>
-          <div class="small">Baseline: ${im.n_baseline} work orders opened on Tuesdays (${im.out_baseline} outside). Monitored: ${im.n_monitor} on Thursdays, <b>${im.out_monitor} outside</b> the Tuesday limits.${im.lcl < 0 ? " The LCL is below 0, so only slow responses can signal." : ""}</div>
-          <p class="howto" style="margin:0">All work orders (repair and rebalance) in the order they were opened. Limits come from Tuesday only, then Thursday is plotted against them. Response times have no built-in daily pattern, so a point outside the limits is a real special cause (a van stuck in traffic, a missed ticket).</p>
+          <div class="small"><b>${xbOut.length} of ${xb.points.length}</b> days outside the limits.</div>
+          <p class="howto" style="margin:0">Subgroup = one day: each station's 24 hourly averages of % open docks (${nStations} station${nStations === 1 ? "" : "s"} × 24 hours).</p>
         </div>
       </div></div>
     <div class="card"><div class="card-h"><h2>p-chart · proportion of stations unusable at each poll</h2>
-      <label class="row small">Window <select id="p-window"><option value="off_peak" ${S.pWindow === "off_peak" ? "selected" : ""}>Fixed window 10:00-15:00</option><option value="all_day" ${S.pWindow === "all_day" ? "selected" : ""}>All day (signals at rush by design)</option></select></label></div>
+      <label class="row small">Window <select id="p-window"><option value="off_peak" ${S.pWindow === "off_peak" ? "selected" : ""}>Fixed window 10:00-15:00</option><option value="all_day" ${S.pWindow === "all_day" ? "selected" : ""}>All day</option></select></label></div>
       <div class="card-b">
         ${pc.message ? `<p class="badge warn">${esc(pc.message)}</p>` : ""}
         ${lineChart({ points: pc.points.map((p) => ({ ...p, y: p.p, out: p.out })), phaseSplit: tueCount, yLabel: "proportion unusable", yMin: 0,
           lines: [{ y: pc.pbar, color: "var(--mean)", label: `p̄ ${fmt(pc.pbar, 3)}` }, { y: pc.points[0].ucl, color: "var(--limit)", label: `UCL ${fmt(pc.points[0].ucl, 3)}`, dash: "5 3" }],
           pointTip: (p) => `${p.t}: ${fmt(p.p * pc.n, 0)} of ${pc.n} unusable (p = ${fmt(p.p, 2)})${p.out ? "\nOUTSIDE LIMITS" : ""}` })}
         ${chartLegend}
-        <div class="grid cols-3" style="margin-top:10px">
+        <div class="grid cols-3 chart-notes">
           <div class="formula">UCL, LCL = p̄ ± 3 √(p̄(1 − p̄)/n)<br>p̄ = ${fmt(pc.pbar, 4)} (Tuesdays), n = ${pc.n} stations<br>UCL = ${fmt(pc.points[0].ucl, 4)}, LCL = ${fmt(pc.points[0].lcl, 4)}</div>
-          <div class="small">Tuesday polls outside: ${pc.out_baseline}. <b>Thursday polls outside: ${pc.out_monitor}</b>. n·p̄ = ${fmt(pc.np_bar, 2)}${pc.np_bar < 5 ? " (below 5: the normal approximation is rough, read the limits as a guide)" : ""}.</div>
-          <p class="howto" style="margin:0">Unusable = out of service, 0 rentable bikes, or 0 open docks. Over a whole day the rush hours push the proportion up by design, so the fixed 10:00-15:00 window is the fair test.</p>
+          <div class="small">Tuesday polls outside: ${pc.out_baseline}. <b>Thursday polls outside: ${pc.out_monitor}</b>.</div>
+          <p class="howto" style="margin:0">Subgroup = one 5-minute poll of all ${pc.n} stations (unusable = out of service, 0 bikes or 0 open docks).</p>
         </div>
       </div></div>
   </div>`;
   $("#xb-scope").onchange = (e) => { S.xbarScope = e.target.value; render(); };
   $("#p-window").onchange = (e) => { S.pWindow = e.target.value; render(); };
-}
-
-function tabReliability(el) {
-  const R = S.data.reliability;
-  const ids = S.data.stations.map((s) => s.station_id);
-  const opt = (sel) => ids.map((id) => `<option value="${id}" ${id === sel ? "selected" : ""}>${esc(stName(id))}</option>`).join("");
-  const st = S.rel ||= { origin: "S07", dest: "S02", window: "rush", p1: "S07", p2: R.stations.S07.nearest, avail: "network", sys: "S07" };
-  const w = st.window === "rush" ? "rush" : "all";
-  const ro = R.stations[st.origin][`R_bike_${w}`], rd = R.stations[st.dest][`R_dock_${w}`];
-  const r1 = R.stations[st.p1][`R_bike_${w}`], r2 = R.stations[st.p2][`R_bike_${w}`];
-  const A = st.avail === "network" ? R.network : R.stations[st.avail];
-  const sys = R.stations[st.sys];
-  const block = (label, v) => `<div style="border:1.5px solid #5d6670;border-radius:6px;padding:6px 10px;background:#fff;text-align:center;min-width:110px"><div class="small muted">${esc(label)}</div><b>${fmt(v, 3)}</b></div>`;
-  const wire = `<div style="width:24px;height:2px;background:#5d6670"></div>`;
-  const safe = (f) => { try { return fmt(f(), 4); } catch (e) { return `<span style="color:#a51d16">${esc(e.message)}</span>`; } };
-  el.innerHTML = `<div class="stack">
-    <div class="row"><label class="row small">Reliability from <select id="rl-window"><option value="rush" ${st.window === "rush" ? "selected" : ""}>Weekday morning rush (7-9 AM)</option><option value="all" ${st.window === "all" ? "selected" : ""}>All hours</option></select></label>
-      <span class="small muted">R = share of polls where the station was in service and had a bike (origin) or an open dock (destination).</span></div>
-    <div class="grid cols-2">
-      <div class="card"><div class="card-h"><h2>Series system · one trip</h2></div><div class="card-b stack" style="gap:10px">
-        <div class="row small"><label>Origin <select id="rl-origin">${opt(st.origin)}</select></label><label>Destination <select id="rl-dest">${opt(st.dest)}</select></label></div>
-        <div class="blocks">${block("bike at origin", ro)}${wire}${block("dock at destination", rd)}</div>
-        <div class="formula">R = R_origin × R_dest = ${fmt(ro, 4)} × ${fmt(rd, 4)}</div>
-        <div class="result">R = ${safe(() => series(ro, rd))}</div>
-        <p class="howto">A trip needs both, so the weaker station drags the trip down. Try a Northside origin and a Downtown destination at the morning rush.</p></div></div>
-      <div class="card"><div class="card-h"><h2>Parallel system · a backup station</h2></div><div class="card-b stack" style="gap:10px">
-        <div class="row small"><label>Station 1 <select id="rl-p1">${opt(st.p1)}</select></label><label>Station 2 <select id="rl-p2">${opt(st.p2)}</select></label></div>
-        <div style="display:grid;gap:6px;border-left:2px solid #5d6670;border-right:2px solid #5d6670;padding:0 10px;width:max-content">${block("bike at station 1", r1)}${block("bike at station 2", r2)}</div>
-        <div class="formula">R = 1 − (1 − R1)(1 − R2) = 1 − (${fmt(1 - r1, 4)})(${fmt(1 - r2, 4)})</div>
-        <div class="result">R = ${safe(() => parallel(r1, r2))}</div>
-        <p class="howto">A rider who can walk to either station gets a bike unless both are empty. Default station 2 is the nearest one (${fmt(R.stations[st.p1].nearest_km, 2)} km from station 1). Assumes the two stations empty independently; neighbours that empty together make the real gain smaller.</p></div></div>
-      <div class="card"><div class="card-h"><h2>Availability · A = MTBF / (MTBF + MTTR)</h2></div><div class="card-b stack" style="gap:10px">
-        <label class="row small">Scope <select id="rl-avail"><option value="network">Whole network (per station)</option>${opt(st.avail)}</select></label>
-        <div class="calc-in small"><span>Unplanned failures</span><b>${A.failures}</b><span>MTBF (hours)</span><b>${fmt(A.mtbf_h, 1)}</b><span>MTTR (hours)</span><b>${fmt(A.mttr_h, 2)}</b></div>
-        <div class="formula">A = ${fmt(A.mtbf_h, 1)} / (${fmt(A.mtbf_h, 1)} + ${fmt(A.mttr_h, 2)})</div>
-        <div class="result">A = ${A.mtbf_h ? safe(() => availability(A.mtbf_h, A.mttr_h)) : "— (no failures)"}</div>
-        <p class="howto">MTBF = station operating hours ÷ unplanned repair tickets. MTTR = mean of (resolved − opened) over the repair tasks in work_orders.csv. Planned maintenance is not a failure.</p></div></div>
-      <div class="card"><div class="card-h"><h2>Station as a system · feed, kiosk and docks in series</h2></div><div class="card-b stack" style="gap:10px">
-        <label class="row small">Station <select id="rl-sys">${opt(st.sys)}</select></label>
-        <div class="blocks">${block("feed fresh", sys.R_feed)}${wire}${block("kiosk up", sys.R_kiosk)}${wire}${block("all docks work", sys.R_docks)}</div>
-        <div class="formula">R = R_feed × R_kiosk × R_docks = ${fmt(sys.R_feed, 4)} × ${fmt(sys.R_kiosk, 4)} × ${fmt(sys.R_docks, 4)}</div>
-        <div class="result">R = ${safe(() => series(sys.R_feed, sys.R_kiosk, sys.R_docks))} <span class="small muted">observed all three at once: ${fmt(sys.R_station_observed, 4)}</span></div>
-        <p class="howto">Each R is the share of polls that part was working (all hours). The series model assumes the parts fail independently; the observed joint share checks that assumption: close numbers mean it holds.</p></div></div>
-    </div></div>`;
-  const bind = (id, key) => { $(id).onchange = (e) => { st[key] = e.target.value; render(); }; };
-  bind("#rl-window", "window"); bind("#rl-origin", "origin"); bind("#rl-dest", "dest"); bind("#rl-p1", "p1"); bind("#rl-p2", "p2"); bind("#rl-avail", "avail"); bind("#rl-sys", "sys");
-  $("#rl-avail").value = st.avail;
 }
 
 // -------------------------------------------------------------- loading
@@ -748,6 +734,7 @@ async function loadDataset(id) {
     if (!res.ok) throw new Error(`data/${id}.json answered HTTP ${res.status}`);
     S.data = await res.json();
     S.datasetId = id; store.set("dataset", id);
+    S.mapView = null;
     if (!S.data.meta.snapshots.includes(S.snap)) S.snap = S.data.meta.snapshots[0];
     if (S.selected && !S.data.stations.some((s) => s.station_id === S.selected)) S.selected = null;
   } catch (err) {
@@ -760,15 +747,13 @@ async function loadDataset(id) {
 
 function route() {
   const id = location.hash.slice(1) || "map";
-  const page = PAGES.find((p) => p.id === id) || PAGES[0];
-  S.page = page.analystOnly && S.role === "dispatcher" ? "map" : page.id;
+  const page = PAGES.find((p) => p.id === (PAGE_ALIASES[id] || id)) || PAGES[0];
+  S.page = page.id;
   render();
   $("#page").focus({ preventScroll: true });
 }
 
 async function init() {
-  $("#role").value = S.role;
-  $("#role").onchange = (e) => { S.role = e.target.value; store.set("role", S.role); route(); };
   $("#collapse").onclick = () => { $("#shell").classList.toggle("collapsed"); store.set("collapsed", $("#shell").classList.contains("collapsed")); };
   if (store.get("collapsed", false)) $("#shell").classList.add("collapsed");
   $("#dataset").onchange = (e) => loadDataset(e.target.value);

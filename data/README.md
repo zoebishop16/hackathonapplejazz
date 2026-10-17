@@ -2,31 +2,39 @@
 
 All data here is **synthetic** (invented, not real riders). It was made by
 [`scripts/generate_data.py`](../scripts/generate_data.py) with fixed seeds, so
-`python3 scripts/generate_data.py` rebuilds every file exactly.
+`python3 scripts/generate_data.py` rebuilds every file exactly, and
+`python3 scripts/validate_data.py` checks every rule below (it prints PASS/FAIL
+for each and exits non-zero on any failure).
 
 ## Datasets
 
 | Folder | What it shows |
 |---|---|
-| `normal_week/seed_1`, `normal_week/seed_2` | an ordinary 3 weeks: a few dock faults, rare kiosk outages, one chronic station |
-| `high_failure_week/seed_1`, `high_failure_week/seed_2` | the same city with about 3x the faults, more offline kiosks and silent feeds, slower vans, three chronic stations |
+| `normal_week/seed_1`, `normal_week/seed_2` | an ordinary 3 weeks: rare dock faults (about 0.5% of polls have a broken dock), rare outages, one chronic station, quick vans that answer most rush-hour stockouts |
+| `high_failure_week/seed_1`, `high_failure_week/seed_2` | the same city in a bad stretch: about 25x the broken-dock polls, 10-17x the out-of-service polls, 11-12x the repair tickets, and 3-4x the empty and full polls (heavier rush demand, slower vans that answer only a quarter of rush-hour stockouts), four chronic stations |
 
-Every dataset: **20 stations** in **4 districts** (Downtown, Northside, Eastside,
-Waterfront), **10-20 docks** each, one poll every **5 minutes**, 24 hours a day,
-for **3 weeks** (Mon 2026-09-07 00:00 to Sun 2026-09-27 23:55; 6,048 polls per
-station, 120,960 rows in `status.csv`).
+Every dataset: **30 stations** at real Boston locations in **6 neighborhoods**
+used as districts, with a random 3-6 stations each: Downtown 6, Back Bay 5,
+Fenway 5, South Boston 5, Jamaica Plain 6, Charlestown 3. **10-20 docks** each,
+one poll every **5 minutes**, 24 hours a day, for **3 weeks** (Mon 2026-09-07
+00:00 to Sun 2026-09-27 23:55; 6,048 polls per station, 181,440 rows in
+`status.csv`). **8 vans.**
 
 Built-in patterns:
-- **Weekday rush hours 7-9 AM and 4-6 PM.** Residential stations (Northside,
-  Eastside) empty out in the morning and refill in the evening; Downtown fills
-  up in the morning and empties in the evening. Waterfront is mixed.
+- **Weekday rush hours 7-9 AM and 4-6 PM.** Residential stations (South
+  Boston, Jamaica Plain, Charlestown) empty out in the morning and refill in
+  the evening; Downtown and Back Bay fill up in the morning and empty in the
+  evening. Fenway is mixed.
 - **Weekends** peak in daylight (about 10 AM-5 PM): residential stations drain,
-  Downtown and Waterfront fill.
+  Downtown, Back Bay and Fenway fill.
 - **Failures:** broken docks, offline or broken kiosks, blocked stations,
   scheduled maintenance and silent feeds (see `status` and `fault` below).
-  Some stations are "chronic" and fail 2.5-3x as often.
-- **Rebalancing:** about half of rush-hour stockouts and fullouts get a van,
-  which resets the station to roughly half full when it arrives.
+  Some stations are "chronic" and fail 2-3x as often.
+- **Broken bikes are uncommon:** about 0.02-0.06 per station-poll in a normal
+  week, 0.08-0.11 in a high-failure week.
+- **Rebalancing:** 70% of rush-hour stockouts and fullouts get a van in a
+  normal week (25% in a high-failure week); the van resets the station to
+  roughly half full when it arrives.
 
 ## Files and columns
 
@@ -34,12 +42,12 @@ Built-in patterns:
 
 | Column | Meaning | Units |
 |---|---|---|
-| `station_id` | station code, `S01`-`S20` | text |
+| `station_id` | station code, `S01`-`S30` | text |
 | `name` | station name | text |
-| `district` | Downtown, Northside, Eastside or Waterfront | text |
+| `district` | Boston neighborhood: Downtown, Back Bay, Fenway, South Boston, Jamaica Plain or Charlestown | text |
 | `profile` | demand pattern: `downtown`, `residential` or `mixed` | text |
 | `total_docks` | docks installed at the station | docks |
-| `x`, `y` | position on the schematic city map | map units, 0-100 (y grows downward) |
+| `lat`, `lon` | real street location (approximate) | decimal degrees (WGS 84) |
 
 ### `status.csv` (one row per station per 5-minute poll; what the feed reports)
 
@@ -98,7 +106,7 @@ A dock not listed at a given time is `working`.
 |---|---|---|
 | `van_id`, `name` | van code and name | text |
 | `capacity` | bikes the van can carry | bikes |
-| `depot_x`, `depot_y` | depot position on the schematic map | map units |
+| `depot_lat`, `depot_lon` | depot location | decimal degrees (WGS 84) |
 
 ## Collecting this for real
 

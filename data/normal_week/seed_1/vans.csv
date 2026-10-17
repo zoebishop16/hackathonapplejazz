@@ -1,5 +1,9 @@
-van_id,name,capacity,depot_x,depot_y
-V1,Van 1,20,50,60
-V2,Van 2,20,50,60
-V3,Van 3,16,30,30
-V4,Van 4,16,75,70
+van_id,name,capacity,depot_lat,depot_lon
+V1,Van 1,20,42.348,-71.064
+V2,Van 2,20,42.348,-71.064
+V3,Van 3,16,42.353,-71.08
+V4,Van 4,16,42.342,-71.095
+V5,Van 5,16,42.338,-71.05
+V6,Van 6,12,42.316,-71.108
+V7,Van 7,12,42.376,-71.064
+V8,Van 8,20,42.348,-71.064

@@ -165,42 +165,6 @@ def xbar_chart(subgroups):
     return {"grand_mean": grand, "sigma_short": sigma, "message": message, "points": points}
 
 
-# --------------------------------------------------------------- I-MR chart
-
-D2_N2 = 1.128   # d2 for moving ranges of 2
-D4_N2 = 3.267   # D4 for moving ranges of 2
-
-
-def imr_chart(baseline, monitor=()):
-    """Individuals and moving-range chart; limits from the baseline only.
-
-    sigma = MR-bar / d2 (d2 = 1.128). X limits: center +/- 3 sigma
-    (= +/- 2.66 MR-bar). MR chart: UCL = D4 x MR-bar = 3.267 MR-bar, LCL = 0.
-    Monitor points are plotted against the baseline limits (Phase II).
-    The moving range of the first monitor point uses the last baseline point.
-    """
-    base = list(baseline)
-    if len(base) < 2:
-        raise ValueError("I-MR needs at least 2 baseline points for a moving range")
-    center = mean(base)
-    mrs = [abs(b - a) for a, b in zip(base, base[1:])]
-    mrbar = mean(mrs)
-    sigma = mrbar / D2_N2
-    ucl, lcl = center + 3 * sigma, center - 3 * sigma
-    mr_ucl = D4_N2 * mrbar
-    seq = base + list(monitor)
-    points = []
-    for i, x in enumerate(seq):
-        mr = abs(x - seq[i - 1]) if i > 0 else None
-        points.append({"i": i, "x": x, "mr": mr, "phase": "baseline" if i < len(base) else "monitor",
-                       "out": (x > ucl or x < lcl) if sigma > 0 else False,
-                       "mr_out": (mr is not None and mr > mr_ucl) if mrbar > 0 else False})
-    return {"center": center, "mrbar": mrbar, "sigma": sigma, "ucl": ucl, "lcl": lcl,
-            "mr_ucl": mr_ucl, "message": None if sigma > 0 else
-            "no variation in the baseline: limits collapse to the center line",
-            "points": points}
-
-
 # ----------------------------------------------------------------- p-chart
 
 def p_chart(baseline, monitor=()):
@@ -275,6 +239,24 @@ def pareto(items):
         run += v
         out.append({"name": name, "value": v, "pct": 100 * v / total, "cum_pct": 100 * run / total})
     return out
+
+
+def median(xs):
+    """Middle value (mean of the two middle values for an even count)."""
+    if not xs:
+        raise ValueError("median of an empty list")
+    v = sorted(xs)
+    k = len(v) // 2
+    return v[k] if len(v) % 2 else (v[k - 1] + v[k]) / 2
+
+
+def repeat_offender_threshold(repair_counts, minimum=3, multiple=2):
+    """Repairs a station needs to count as a repeat offender.
+
+    At least `minimum` repairs AND at least `multiple` x the network median, so
+    a bad week where every station breaks still singles out the chronic ones.
+    """
+    return max(minimum, multiple * median(list(repair_counts)))
 
 
 # ------------------------------------------------------------- reliability

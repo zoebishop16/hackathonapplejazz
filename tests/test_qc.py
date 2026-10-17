@@ -4,8 +4,8 @@ import math
 
 import pytest
 
-from app.qc import (availability, effective_capacity, event_log, fill_category, fill_pct,
-                    forecast_bikes, imr_chart, misleading_flag, mtbf_mttr, occurrence_score,
+from app.qc import (availability, median, repeat_offender_threshold, effective_capacity, event_log, fill_category, fill_pct,
+                    forecast_bikes, misleading_flag, mtbf_mttr, occurrence_score,
                     p_chart, parallel, pareto, rpn, series, xbar_chart)
 
 
@@ -88,26 +88,6 @@ def test_xbar_degenerate_n1():
         xbar_chart([("A", [])])
 
 
-# ---- I-MR chart (SPEC 4c)
-
-def test_imr_known_answer():
-    r = imr_chart([10, 12, 14, 12], [20])
-    assert r["center"] == 12 and r["mrbar"] == 2
-    assert r["ucl"] == pytest.approx(12 + 6 / 1.128)  # 17.319
-    assert r["ucl"] == pytest.approx(17.319, abs=1e-3)
-    assert r["lcl"] == pytest.approx(6.681, abs=1e-3)
-    assert r["mr_ucl"] == pytest.approx(6.534)
-    last = r["points"][-1]
-    assert last["phase"] == "monitor" and last["out"] and last["mr"] == 8 and last["mr_out"]
-
-
-def test_imr_degenerate():
-    with pytest.raises(ValueError):
-        imr_chart([5])
-    r = imr_chart([5, 5, 5])
-    assert r["sigma"] == 0 and r["message"] and not any(p["out"] for p in r["points"])
-
-
 # ---- p-chart (SPEC 4d)
 
 def test_p_chart_known_answer():
@@ -180,3 +160,13 @@ def test_forecast():
     assert forecast_bikes(2, 10, 0.5, 0.2) == (0.0, "empty")
     assert forecast_bikes(9, 10, 0.5, 0.8) == (10.0, "full")
     assert forecast_bikes(0, 0, 0.5, 0.5) == (None, None)
+
+
+# ---- repeat offenders
+
+def test_median_and_repeat_threshold():
+    assert median([3, 1, 2]) == 2 and median([1, 2, 3, 4]) == 2.5
+    assert repeat_offender_threshold([0, 1, 1, 2, 5]) == 3          # quiet week: the floor of 3
+    assert repeat_offender_threshold([10, 12, 12, 14, 40]) == 24    # bad week: 2 x median 12
+    with pytest.raises(ValueError):
+        repeat_offender_threshold([])

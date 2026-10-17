@@ -1,18 +1,22 @@
 """Generate the synthetic bikeshare test datasets in data/.
 
 Run from the repo root:  python3 scripts/generate_data.py
+Then check them:          python3 scripts/validate_data.py
 
 Standard library only. Every run is seeded, so the files are reproducible.
 Writes data/<scenario>/<seed_n>/ with five CSVs each (see data/README.md):
 stations.csv, status.csv, dock_faults.csv, work_orders.csv, vans.csv.
 
-The rules (from the team's design document):
-- 20 stations across 4 districts, 10 to 20 docks each
+The rules (from the team's design document, revised):
+- 6 Boston neighborhoods as districts, a random 3 to 6 stations in each
+  (30 to 40 stations in all), placed at real street locations (lat/lon)
+- 10 to 20 docks per station
 - one poll every 5 minutes, 24 hours a day, for 3 weeks (starting Monday)
 - weekday rush hours 7-9 AM and 4-6 PM: residential stations empty out in the
   morning and downtown stations fill up; the evening reverses it
 - weekends peak in daylight
-- a few stations have broken docks or go offline; more in high_failure_week
+- a few stations have broken docks or go offline; far more in high_failure_week
+- broken bikes are uncommon (well under 1 per station on average)
 """
 
 import csv
@@ -28,33 +32,59 @@ POLLS = DAYS * 24 * 60 // POLL_MIN  # 6048
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 
-# district -> (centre x, centre y, station profile). Map units are 0-100.
+# Six Boston neighborhoods. Each lists up to 6 real locations (name, lat, lon);
+# the generator keeps the first 3-6. Coordinates are street-level approximations.
 DISTRICTS = {
-    "Downtown": (52, 48, "downtown"),
-    "Northside": (48, 14, "residential"),
-    "Eastside": (86, 52, "residential"),
-    "Waterfront": (18, 76, "mixed"),
+    "Downtown": ("downtown", [
+        ("Government Center", 42.3597, -71.0592), ("Downtown Crossing", 42.3555, -71.0605),
+        ("South Station", 42.3523, -71.0552), ("Faneuil Hall", 42.3600, -71.0568),
+        ("Post Office Square", 42.3561, -71.0555), ("Park Street", 42.3564, -71.0624)]),
+    "Back Bay": ("downtown", [
+        ("Copley Square", 42.3499, -71.0774), ("Back Bay Station", 42.3473, -71.0754),
+        ("Boylston & Arlington", 42.3520, -71.0702), ("Newbury & Mass Ave", 42.3487, -71.0870),
+        ("Prudential Center", 42.3471, -71.0825), ("Commonwealth & Dartmouth", 42.3511, -71.0790)]),
+    "Fenway": ("mixed", [
+        ("Fenway Park", 42.3467, -71.0972), ("Kenmore Square", 42.3489, -71.0952),
+        ("Museum of Fine Arts", 42.3394, -71.0940), ("Longwood Medical Area", 42.3381, -71.1058),
+        ("Northeastern University", 42.3398, -71.0892), ("Boylston & Jersey St", 42.3445, -71.1000)]),
+    "South Boston": ("residential", [
+        ("Broadway Station", 42.3426, -71.0570), ("Andrew Square", 42.3302, -71.0570),
+        ("L St & E Broadway", 42.3348, -71.0350), ("World Trade Center", 42.3486, -71.0420),
+        ("Dorchester Heights", 42.3330, -71.0480), ("M Street Beach", 42.3320, -71.0300)]),
+    "Jamaica Plain": ("residential", [
+        ("Jackson Square", 42.3232, -71.0995), ("JP Centre & Eliot", 42.3105, -71.1150),
+        ("Green Street", 42.3105, -71.1074), ("Forest Hills", 42.3005, -71.1137),
+        ("Jamaica Pond", 42.3160, -71.1200), ("Hyde Square", 42.3215, -71.1100)]),
+    "Charlestown": ("residential", [
+        ("Bunker Hill Monument", 42.3763, -71.0608), ("Navy Yard", 42.3735, -71.0545),
+        ("Sullivan Square", 42.3840, -71.0770), ("Community College", 42.3737, -71.0696),
+        ("City Square", 42.3720, -71.0620), ("Thompson Square", 42.3767, -71.0646)]),
 }
-STATION_NAMES = {
-    "Downtown": ["City Hall", "Main & 5th", "Transit Center", "Library Square", "Market Hall"],
-    "Northside": ["Elm Park", "Hillcrest", "North Commons", "Maple Ave", "Ridge Rd"],
-    "Eastside": ["Eastgate", "Orchard St", "Linden Way", "Fall Creek", "Belle Sherman"],
-    "Waterfront": ["Pier 1", "Boathouse", "Marina", "Inlet Trail", "Ferry Landing"],
-}
+
+VANS = [  # name, capacity (bikes), depot (lat, lon)
+    ("Van 1", 20, 42.3480, -71.0640), ("Van 2", 20, 42.3480, -71.0640),
+    ("Van 3", 16, 42.3530, -71.0800), ("Van 4", 16, 42.3420, -71.0950),
+    ("Van 5", 16, 42.3380, -71.0500), ("Van 6", 12, 42.3160, -71.1080),
+    ("Van 7", 12, 42.3760, -71.0640), ("Van 8", 20, 42.3480, -71.0640),
+]
 
 SCENARIOS = {
     # fault rates are expected events per station per week
     "normal_week": {
         "seeds": {"seed_1": 11, "seed_2": 12},
-        "rates": {"dock_fault": 0.5, "offline": 0.08, "broken_kiosk": 0.08,
-                  "silent_feed": 0.1, "blocked": 0.04, "maintenance": 0.15},
-        "chronic": 1, "chronic_mult": 2.5, "response_mean": 22, "broken_bike_p": 0.0008,
+        "rates": {"dock_fault": 0.35, "offline": 0.04, "broken_kiosk": 0.04,
+                  "silent_feed": 0.06, "blocked": 0.02, "maintenance": 0.12},
+        "chronic": 1, "chronic_mult": 2.0, "dock_fault_sizes": [1, 1, 1, 2],
+        "parts_wait_p": 0.15, "response_mean": 18, "rebalance_p": 0.7,
+        "demand_amp": 1.0, "broken_bike_p": 0.0002, "broken_bike_fix_p": 0.004,
     },
     "high_failure_week": {
         "seeds": {"seed_1": 21, "seed_2": 22},
-        "rates": {"dock_fault": 1.6, "offline": 0.35, "broken_kiosk": 0.3,
-                  "silent_feed": 0.45, "blocked": 0.15, "maintenance": 0.2},
-        "chronic": 3, "chronic_mult": 3.0, "response_mean": 38, "broken_bike_p": 0.002,
+        "rates": {"dock_fault": 2.4, "offline": 0.6, "broken_kiosk": 0.5,
+                  "silent_feed": 0.6, "blocked": 0.25, "maintenance": 0.3},
+        "chronic": 4, "chronic_mult": 3.0, "dock_fault_sizes": [1, 2, 2, 3, 4, 5],
+        "parts_wait_p": 0.45, "response_mean": 45, "rebalance_p": 0.25,
+        "demand_amp": 1.25, "broken_bike_p": 0.0004, "broken_bike_fix_p": 0.003,
     },
 }
 
@@ -105,12 +135,20 @@ def iso(minute):
     return (START + timedelta(minutes=minute)).strftime("%Y-%m-%d %H:%M")
 
 
+def station_counts(rng):
+    """A random 3-6 stations per district, 30-40 in all, not all the same."""
+    while True:
+        counts = [rng.randint(3, 6) for _ in DISTRICTS]
+        if 30 <= sum(counts) <= 40 and len(set(counts)) > 1:
+            return counts
+
+
 def make_stations():
     rng = random.Random(2026)  # the city is the same in every dataset
     stations = []
     n = 0
-    for district, (cx, cy, profile) in DISTRICTS.items():
-        for name in STATION_NAMES[district]:
+    for (district, (profile, places)), k in zip(DISTRICTS.items(), station_counts(rng)):
+        for name, lat, lon in places[:k]:
             n += 1
             stations.append({
                 "station_id": f"S{n:02d}",
@@ -118,8 +156,8 @@ def make_stations():
                 "district": district,
                 "profile": profile,
                 "total_docks": rng.randint(10, 20),
-                "x": round(cx + rng.uniform(-11, 11), 1),
-                "y": round(cy + rng.uniform(-9, 9), 1),
+                "lat": lat,
+                "lon": lon,
                 "amp": rng.uniform(0.85, 1.1),
                 "offset": rng.uniform(-0.05, 0.05),
             })
@@ -169,13 +207,13 @@ def make_faults(rng, stations, cfg, vans):
                 repair = {"dock_fault": lognormal_minutes(rng, 45), "offline": lognormal_minutes(rng, 30),
                           "broken_kiosk": lognormal_minutes(rng, 60), "maintenance": rng.uniform(45, 120),
                           "silent_feed": lognormal_minutes(rng, 20)}[kind]
-                if kind == "dock_fault" and rng.random() < 0.3:
+                if kind == "dock_fault" and rng.random() < cfg["parts_wait_p"]:
                     repair += rng.uniform(240, 1440)  # waits for a spare part
                 resolved = arrived + repair
                 end = snap(resolved)
                 fault = {"station_id": st["station_id"], "kind": kind, "start": start, "end": end}
                 if kind == "dock_fault":
-                    k = min(rng.choice([1, 1, 2, 2, 3, 4]), st["total_docks"] - 4)
+                    k = min(rng.choice(cfg["dock_fault_sizes"]), st["total_docks"] - 4)
                     fault["docks"] = rng.sample(range(1, st["total_docks"] + 1), k)
                     for d in fault["docks"]:
                         dock_faults.append({"station_id": st["station_id"],
@@ -213,6 +251,7 @@ def simulate(rng, stations, faults, orders, cfg, vans):
         pending = []   # rebalance van arrivals: (minute, )
         prev_bikes = None
         empty_since = full_since = None
+        amp = st["amp"] * cfg["demand_amp"]
         for i in range(POLLS):
             minute = i * POLL_MIN
             day, mod = divmod(minute, 1440)
@@ -226,7 +265,7 @@ def simulate(rng, stations, faults, orders, cfg, vans):
             oos = next((f["kind"] for f in active if f["kind"] in OUT_OF_SERVICE), None)
             silent = any(f["kind"] == "silent_feed" for f in active)
 
-            tgt = target_fill(st["profile"], dow, hour, st["amp"], st["offset"])
+            tgt = target_fill(st["profile"], dow, hour, amp, st["offset"])
             if oos is None:
                 dev = 0.97 * dev + rng.gauss(0, noise_sd(dow, hour))
             # a rebalancing van arrives: reset the station to about half full
@@ -242,8 +281,8 @@ def simulate(rng, stations, faults, orders, cfg, vans):
             prev_bikes = bikes
             if rng.random() < cfg["broken_bike_p"]:
                 broken_bikes += 1
-            # each broken bike is collected by a mechanic at 0.2% per poll (about 2 days)
-            broken_bikes -= sum(1 for _ in range(broken_bikes) if rng.random() < 0.002)
+            # each broken bike is collected by a mechanic at broken_bike_fix_p per poll
+            broken_bikes -= sum(1 for _ in range(broken_bikes) if rng.random() < cfg["broken_bike_fix_p"])
             bd = min(broken_bikes, bikes)
             row = {"timestamp": iso(minute), "station_id": sid,
                    "num_bikes_available": bikes - bd, "num_bikes_disabled": bd,
@@ -265,13 +304,13 @@ def simulate(rng, stations, faults, orders, cfg, vans):
             if oos is None and not silent:
                 if bikes == 0 and empty_since is None:
                     empty_since = minute
-                    if in_rush and rng.random() < 0.45:
+                    if in_rush and rng.random() < cfg["rebalance_p"]:
                         pending.append(dispatch(rng, orders, sid, "stockout", minute, cfg, vans, eff))
                 elif bikes > 0:
                     empty_since = None
                 if bikes == eff and full_since is None:
                     full_since = minute
-                    if in_rush and rng.random() < 0.45:
+                    if in_rush and rng.random() < cfg["rebalance_p"]:
                         pending.append(dispatch(rng, orders, sid, "fullout", minute, cfg, vans, eff))
                 elif bikes < eff:
                     full_since = None
@@ -293,16 +332,15 @@ def dispatch(rng, orders, sid, kind, minute, cfg, vans, eff):
 
 def write_csv(path, rows, fields):
     with open(path, "w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
+        w = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore", lineterminator="\n")
         w.writeheader()
         w.writerows(rows)
 
 
 def main():
     stations = make_stations()
-    vans = [{"van_id": f"V{i}", "name": n, "capacity": c, "depot_x": x, "depot_y": y}
-            for i, (n, c, x, y) in enumerate([("Van 1", 20, 50, 60), ("Van 2", 20, 50, 60),
-                                                ("Van 3", 16, 30, 30), ("Van 4", 16, 75, 70)], 1)]
+    vans = [{"van_id": f"V{i}", "name": n, "capacity": c, "depot_lat": lat, "depot_lon": lon}
+            for i, (n, c, lat, lon) in enumerate(VANS, 1)]
     for scenario, cfg in SCENARIOS.items():
         for label, seed in cfg["seeds"].items():
             rng = random.Random(seed)
@@ -321,7 +359,7 @@ def main():
             d = os.path.join(ROOT, scenario, label)
             os.makedirs(d, exist_ok=True)
             write_csv(os.path.join(d, "stations.csv"), stations,
-                      ["station_id", "name", "district", "profile", "total_docks", "x", "y"])
+                      ["station_id", "name", "district", "profile", "total_docks", "lat", "lon"])
             write_csv(os.path.join(d, "status.csv"), rows,
                       ["timestamp", "station_id", "num_bikes_available", "num_bikes_disabled",
                        "num_docks_available", "num_docks_disabled", "status", "is_renting",
@@ -333,9 +371,9 @@ def main():
                        "arrived_at", "resolved_at", "response_min", "repair_min", "van_id",
                        "bikes_moved"])
             write_csv(os.path.join(d, "vans.csv"), vans,
-                      ["van_id", "name", "capacity", "depot_x", "depot_y"])
-            print(f"{scenario}/{label}: {len(rows)} polls, {len(out)} work orders, "
-                  f"{len(faults)} faults, chronic stations {chronic}")
+                      ["van_id", "name", "capacity", "depot_lat", "depot_lon"])
+            print(f"{scenario}/{label}: {len(stations)} stations, {len(rows)} polls, "
+                  f"{len(out)} work orders, {len(faults)} faults, chronic stations {chronic}")
 
 
 if __name__ == "__main__":

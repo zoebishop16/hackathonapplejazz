@@ -23,7 +23,7 @@ OUT = os.path.join(ROOT, "app", "site", "data")
 FMT = "%Y-%m-%d %H:%M"
 DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 STALE_MIN = 15          # a feed older than this is stale
-KM_PER_UNIT = 0.05      # schematic map: 100 units = 5 km
+EARTH_KM = 6371.0
 SNAPSHOTS = [           # "now" for the live pages: week 3
     ("Wed 08:15 (morning rush)", "2026-09-23 08:15"),
     ("Wed 12:00 (midday)", "2026-09-23 12:00"),
@@ -32,6 +32,7 @@ SNAPSHOTS = [           # "now" for the live pages: week 3
 ]
 OOS = ("offline", "broken_kiosk", "blocked", "maintenance")
 FAILURE_FAULTS = ("dock_fault", "offline", "broken_kiosk", "silent_feed")  # unplanned
+HORIZONS = (30, 60, 90, 120)  # forecast horizons, minutes ahead
 
 
 def t(s):
@@ -51,7 +52,7 @@ def load(folder):
     stations = read(os.path.join(folder, "stations.csv"))
     for s in stations:
         s["total_docks"] = int(s["total_docks"])
-        s["x"], s["y"] = float(s["x"]), float(s["y"])
+        s["lat"], s["lon"] = float(s["lat"]), float(s["lon"])
     polls = defaultdict(list)
     for row in read(os.path.join(folder, "status.csv")):
         p = {"time": t(row["timestamp"]), "ba": int(row["num_bikes_available"]),
@@ -100,7 +101,11 @@ def problems(p):
 
 
 def dist(a, b):
-    return math.hypot(a["x"] - b["x"], a["y"] - b["y"]) * KM_PER_UNIT
+    """Great-circle (haversine) distance in km between two points with lat/lon."""
+    p1, p2 = math.radians(a["lat"]), math.radians(b["lat"])
+    dp, dl = p2 - p1, math.radians(b["lon"] - a["lon"])
+    h = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * EARTH_KM * math.asin(math.sqrt(h))
 
 
 def order_json(o):
@@ -165,7 +170,7 @@ def snapshot(now, stations, polls, faults, orders, vans):
         if p["active"] and p["eff"] > 0:
             h0 = hist_fill(polls[sid], now, 0)
             item = {"id": sid, "bikes": bikes, "eff": p["eff"], "hist_now": r(h0, 3)}
-            for m in (30, 60):
+            for m in HORIZONS:
                 hm = hist_fill(polls[sid], now, m)
                 proj, risk = qc.forecast_bikes(bikes, p["eff"], h0, hm) if h0 is not None and hm is not None else (None, None)
                 later = polls[sid][idx + m // 5] if idx + m // 5 < len(polls[sid]) else None
@@ -177,18 +182,20 @@ def snapshot(now, stations, polls, faults, orders, vans):
                              f"actual{m}": actual})
             now_risk = "empty" if p["ba"] == 0 else "full" if p["da"] == 0 else None
             item["risk_now"] = now_risk
+            # urgency: 5 = empty/full now, 4 = within 30 min, 3 = 1 h, 2 = 1.5 h, 1 = 2 h, 0 = no risk
+            first = next((m for m in HORIZONS if item[f"risk{m}"]), None)
             if now_risk:
-                item["urgency"], item["minutes_to_hit"] = 3, 0
-            elif item["risk30"]:
-                item["urgency"], item["minutes_to_hit"] = 2, 30
-            elif item["risk60"]:
-                item["urgency"], item["minutes_to_hit"] = 1, 60
+                item["urgency"], item["minutes_to_hit"] = 5, 0
+            elif first is not None:
+                item["urgency"], item["minutes_to_hit"] = len(HORIZONS) - HORIZONS.index(first), first
             else:
                 item["urgency"], item["minutes_to_hit"] = 0, None
-            # expected impact: bikes the hour's average flow moves in (+) or out (-)
-            hm60 = item["hist60"]
-            item["impact_bikes"] = r(abs((hm60 - h0) * p["eff"]), 1) if h0 is not None and hm60 is not None else 0
-            item["risk"] = now_risk or item["risk30"] or item["risk60"]
+            item["priority"] = ("high" if item["urgency"] >= 4 else "medium" if item["urgency"] >= 2
+                                else "low" if item["urgency"] == 1 else "none")
+            # expected impact: bikes the average flow moves in or out by the time it hits (or in 2 h)
+            hh = item[f"hist{first or HORIZONS[-1]}"]
+            item["impact_bikes"] = r(abs((hh - h0) * p["eff"]), 1) if h0 is not None and hh is not None else 0
+            item["risk"] = now_risk or (item[f"risk{first}"] if first else None)
             fc.append(item)
     fc.sort(key=lambda i: (-i["urgency"], -(i["impact_bikes"] or 0)))
     for rank, i in enumerate(fc, 1):
@@ -232,8 +239,8 @@ def snapshot(now, stations, polls, faults, orders, vans):
             load = cur["bikes_moved"] if (cur["fault"] == "stockout") == (st == "en route") and cur["order_type"] == "rebalance" else 0
         van_rows.append({"van": v["van_id"], "name": v["name"], "capacity": int(v["capacity"]),
                          "status": st, "station": where, "load": load,
-                         "x": byid[where]["x"] if where in byid else float(v["depot_x"]),
-                         "y": byid[where]["y"] if where in byid else float(v["depot_y"]),
+                         "lat": byid[where]["lat"] if where in byid else float(v["depot_lat"]),
+                         "lon": byid[where]["lon"] if where in byid else float(v["depot_lon"]),
                          "queue": [o["order_id"] for o in mine]})
 
     def resolution(kind):
@@ -247,7 +254,9 @@ def snapshot(now, stations, polls, faults, orders, vans):
     for o in orders:
         if o["order_type"] == "repair" and o["opened_at"] <= now and o["fault"] in FAILURE_FAULTS:
             counts[o["station_id"]] += 1
-    offenders = sorted(({"station": k, "repairs": v} for k, v in counts.items() if v >= 3),
+    all_counts = {st["station_id"]: counts.get(st["station_id"], 0) for st in stations}
+    threshold = qc.repeat_offender_threshold(all_counts.values())
+    offenders = sorted(({"station": k, "repairs": v} for k, v in all_counts.items() if v >= threshold),
                        key=lambda d: -d["repairs"])
     backlog = [o for o in active if o["order_type"] == "repair"]
     return {"time": now.strftime(FMT), "stations": rows, "docks": docks, "forecast": fc,
@@ -259,7 +268,8 @@ def snapshot(now, stations, polls, faults, orders, vans):
             "maintenance": {"mttr_min": r(qc.mean(restore), 1) if restore else None,
                             "mttr_n": len(restore), "backlog": len(backlog),
                             "backlog_unassigned": sum(1 for o in backlog if o["assigned_at"] > now),
-                            "repeat_offenders": offenders}}
+                            "repeat_offenders": offenders, "repeat_threshold": threshold,
+                            "repair_counts": all_counts}}
 
 
 def heatmap(stations, polls):
@@ -284,18 +294,24 @@ def heatmap(stations, polls):
 
 
 def hourly_open_pct(polls):
-    """{(week, how): mean % open docks in that clock hour}, active polls only."""
+    """{(day, hour): mean % open docks in that clock hour}, active polls only."""
     acc = defaultdict(list)
     t0 = polls[0]["time"]
     for p in polls:
         if p["active"] and p["eff"] > 0:
-            week = (p["time"] - t0).days // 7
-            acc[(week, p["time"].weekday() * 24 + p["time"].hour)].append(100 * p["da"] / p["eff"])
+            acc[((p["time"] - t0).days, p["time"].hour)].append(100 * p["da"] / p["eff"])
     return {k: qc.mean(v) for k, v in acc.items()}
 
 
 def xbar_series(stations, polls):
+    """Daily X-bar chart of % docks open: one subgroup per day of the 3 weeks.
+
+    Each observation is one station's average % open docks in one clock hour of
+    that day, so a subgroup holds up to 24 x (stations in scope) values.
+    """
     per = {s["station_id"]: hourly_open_pct(polls[s["station_id"]]) for s in stations}
+    t0 = polls[stations[0]["station_id"]][0]["time"]
+    days = len(polls[stations[0]["station_id"]]) * 5 // 1440
     scopes = {"network": [s["station_id"] for s in stations]}
     for d in sorted({s["district"] for s in stations}):
         scopes[f"district:{d}"] = [s["station_id"] for s in stations if s["district"] == d]
@@ -304,12 +320,13 @@ def xbar_series(stations, polls):
     out = {}
     for name, ids in scopes.items():
         groups = []
-        for how in range(168):
-            vals = [per[i][(w, how)] for i in ids for w in range(3) if (w, how) in per[i]]
-            groups.append((f"{DOW[how // 24]} {how % 24:02d}:00", vals))
+        for day in range(days):
+            vals = [per[i][(day, h)] for i in ids for h in range(24) if (day, h) in per[i]]
+            date = t0 + timedelta(days=day)
+            groups.append((f"{DOW[date.weekday()]} {date.strftime('%m-%d')}", vals))
         res = qc.xbar_chart(groups)
         out[name] = {"grand_mean": r(res["grand_mean"]), "sigma_short": r(res["sigma_short"]),
-                     "message": res["message"],
+                     "message": res["message"], "subgroup": "day",
                      "points": [{"label": p["label"], "n": p["n"], "mean": r(p["mean"]),
                                  "ucl": r(p["ucl"]), "lcl": r(p["lcl"]), "out": p["out"]}
                                 for p in res["points"]]}
@@ -337,21 +354,6 @@ def pchart(stations, polls):
                      "out_baseline": sum(p["out"] for p in res["points"] if p["phase"] == "baseline"),
                      "out_monitor": sum(p["out"] for p in res["points"] if p["phase"] == "monitor")}
     return out
-
-
-def imr(orders):
-    tue = sorted((o for o in orders if o["opened_at"].weekday() == 1), key=lambda o: o["opened_at"])
-    thu = sorted((o for o in orders if o["opened_at"].weekday() == 3), key=lambda o: o["opened_at"])
-    res = qc.imr_chart([o["response_min"] for o in tue], [o["response_min"] for o in thu])
-    ids = tue + thu
-    return {"center": r(res["center"]), "mrbar": r(res["mrbar"]), "sigma": r(res["sigma"]),
-            "ucl": r(res["ucl"]), "lcl": r(res["lcl"]), "mr_ucl": r(res["mr_ucl"]),
-            "message": res["message"], "n_baseline": len(tue), "n_monitor": len(thu),
-            "points": [{"id": o["order_id"], "opened": o["opened_at"].strftime(FMT),
-                        "type": o["order_type"], "x": p["x"], "mr": r(p["mr"]), "phase": p["phase"],
-                        "out": p["out"], "mr_out": p["mr_out"]} for o, p in zip(ids, res["points"])],
-            "out_baseline": sum(p["out"] for p in res["points"] if p["phase"] == "baseline"),
-            "out_monitor": sum(p["out"] for p in res["points"] if p["phase"] == "monitor")}
 
 
 def fmea(stations, polls, orders):
@@ -416,28 +418,20 @@ def reliability(stations, polls, orders):
 
 def build(folder, scenario, seed):
     stations, polls, faults, orders, vans = load(folder)
-    events = []
-    for s in stations:
-        for e in qc.event_log([(p["time"], p["ba"], p["da"], p["active"]) for p in polls[s["station_id"]]]):
-            events.append({"station": s["station_id"], "kind": e["kind"], "start": e["start"].strftime(FMT),
-                           "duration_min": e["duration_min"], "ongoing": e["ongoing"]})
-    events.sort(key=lambda e: e["start"])
     first = polls[stations[0]["station_id"]][0]["time"]
     last = polls[stations[0]["station_id"]][-1]["time"]
     return {
         "meta": {"id": f"{scenario}__{seed}", "scenario": scenario, "seed": seed,
                  "start": first.strftime(FMT), "end": last.strftime(FMT), "poll_min": 5,
                  "stale_min": STALE_MIN, "snapshots": [lab for lab, _ in SNAPSHOTS]},
-        "stations": [{k: s[k] for k in ("station_id", "name", "district", "profile", "total_docks", "x", "y")}
+        "stations": [{k: s[k] for k in ("station_id", "name", "district", "profile", "total_docks", "lat", "lon")}
                      for s in stations],
         "vans": vans,
         "orders": [order_json(o) for o in orders],
         "snapshots": {lab: snapshot(t(ts), stations, polls, faults, orders, vans) for lab, ts in SNAPSHOTS},
         "heatmap": heatmap(stations, polls),
-        "events": events,
         "xbar": xbar_series(stations, polls),
         "pchart": pchart(stations, polls),
-        "imr": imr(orders),
         "fmea": fmea(stations, polls, orders),
         "reliability": reliability(stations, polls, orders),
     }
@@ -460,7 +454,7 @@ def main():
                 json.dump(doc, fh, separators=(",", ":"))
             index.append({"id": doc["meta"]["id"], "label": f"{scenario.replace('_', ' ')} / {seed.replace('_', ' ')}"})
             print(f"wrote {os.path.relpath(path, ROOT)} ({os.path.getsize(path) // 1024} KB), "
-                  f"{len(doc['events'])} stockout/fullout events")
+                  f"{len(doc['stations'])} stations")
     index.sort(key=lambda d: (not d["id"].startswith("normal"), d["id"]))
     with open(os.path.join(OUT, "index.json"), "w") as fh:
         json.dump(index, fh, indent=1)

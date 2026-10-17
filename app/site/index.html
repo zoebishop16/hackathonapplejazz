@@ -6,7 +6,8 @@
   <title>Dock Watch</title>
   <meta name="description" content="Bikeshare dock-availability and quality-control dashboard (synthetic data).">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='4' cy='11' r='3' fill='none' stroke='%23334' stroke-width='1.5'/%3E%3Ccircle cx='12' cy='11' r='3' fill='none' stroke='%23334' stroke-width='1.5'/%3E%3Cpath d='M4 11l3-6h3l2 6M7 5h-2' fill='none' stroke='%23334' stroke-width='1.5'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
   <div class="shell" id="shell">
@@ -18,18 +19,10 @@
         <span class="brand-name">Dock Watch</span>
       </div>
       <nav id="nav"></nav>
-      <div class="role">
-        <label for="role">View as</label>
-        <select id="role">
-          <option value="analyst">Analyst</option>
-          <option value="dispatcher">Dispatcher</option>
-        </select>
-        <p class="role-note">A view filter, not a login.</p>
-      </div>
     </aside>
     <div class="main">
       <header class="topbar">
-        <h1 id="page-title">Live Map</h1>
+        <h1 id="page-title">Map</h1>
         <div class="top-controls">
           <label>Dataset <select id="dataset" aria-label="Dataset"></select></label>
           <label>Snapshot <select id="snapshot" aria-label="Snapshot time"></select></label>
@@ -40,6 +33,7 @@
     </div>
   </div>
   <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
-  <script type="module" src="app.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script type="module" src="app.js?v=6"></script>
 </body>
 </html>

@@ -1,21 +1,31 @@
-station_id,name,district,profile,total_docks,x,y
-S01,City Hall,Downtown,downtown,11,48.0,56.1
-S02,Main & 5th,Downtown,downtown,13,60.7,50.2
-S03,Transit Center,Downtown,downtown,17,57.5,49.6
-S04,Library Square,Downtown,downtown,11,47.3,40.8
-S05,Market Hall,Downtown,downtown,17,55.9,42.8
-S06,Elm Park,Northside,residential,15,54.7,23.0
-S07,Hillcrest,Northside,residential,15,39.0,14.7
-S08,North Commons,Northside,residential,20,52.5,15.4
-S09,Maple Ave,Northside,residential,15,47.1,6.6
-S10,Ridge Rd,Northside,residential,11,46.4,19.4
-S11,Eastgate,Eastside,residential,16,95.2,47.7
-S12,Orchard St,Eastside,residential,17,86.3,57.5
-S13,Linden Way,Eastside,residential,10,96.2,52.4
-S14,Fall Creek,Eastside,residential,16,85.3,51.7
-S15,Belle Sherman,Eastside,residential,20,90.4,55.1
-S16,Pier 1,Waterfront,mixed,18,12.5,74.2
-S17,Boathouse,Waterfront,mixed,20,18.0,75.6
-S18,Marina,Waterfront,mixed,14,25.3,67.2
-S19,Inlet Trail,Waterfront,mixed,17,24.7,83.7
-S20,Ferry Landing,Waterfront,mixed,17,17.3,80.8
+station_id,name,district,profile,total_docks,lat,lon
+S01,Government Center,Downtown,downtown,15,42.3597,-71.0592
+S02,Downtown Crossing,Downtown,downtown,14,42.3555,-71.0605
+S03,South Station,Downtown,downtown,19,42.3523,-71.0552
+S04,Faneuil Hall,Downtown,downtown,15,42.36,-71.0568
+S05,Post Office Square,Downtown,downtown,16,42.3561,-71.0555
+S06,Park Street,Downtown,downtown,11,42.3564,-71.0624
+S07,Copley Square,Back Bay,downtown,19,42.3499,-71.0774
+S08,Back Bay Station,Back Bay,downtown,18,42.3473,-71.0754
+S09,Boylston & Arlington,Back Bay,downtown,17,42.352,-71.0702
+S10,Newbury & Mass Ave,Back Bay,downtown,19,42.3487,-71.087
+S11,Prudential Center,Back Bay,downtown,10,42.3471,-71.0825
+S12,Fenway Park,Fenway,mixed,20,42.3467,-71.0972
+S13,Kenmore Square,Fenway,mixed,17,42.3489,-71.0952
+S14,Museum of Fine Arts,Fenway,mixed,11,42.3394,-71.094
+S15,Longwood Medical Area,Fenway,mixed,17,42.3381,-71.1058
+S16,Northeastern University,Fenway,mixed,18,42.3398,-71.0892
+S17,Broadway Station,South Boston,residential,14,42.3426,-71.057
+S18,Andrew Square,South Boston,residential,17,42.3302,-71.057
+S19,L St & E Broadway,South Boston,residential,13,42.3348,-71.035
+S20,World Trade Center,South Boston,residential,10,42.3486,-71.042
+S21,Dorchester Heights,South Boston,residential,17,42.333,-71.048
+S22,Jackson Square,Jamaica Plain,residential,15,42.3232,-71.0995
+S23,JP Centre & Eliot,Jamaica Plain,residential,17,42.3105,-71.115
+S24,Green Street,Jamaica Plain,residential,17,42.3105,-71.1074
+S25,Forest Hills,Jamaica Plain,residential,10,42.3005,-71.1137
+S26,Jamaica Pond,Jamaica Plain,residential,11,42.316,-71.12
+S27,Hyde Square,Jamaica Plain,residential,18,42.3215,-71.11
+S28,Bunker Hill Monument,Charlestown,residential,12,42.3763,-71.0608
+S29,Navy Yard,Charlestown,residential,17,42.3735,-71.0545
+S30,Sullivan Square,Charlestown,residential,17,42.384,-71.077
