@@ -1,6 +1,6 @@
 # Dock Watch: a bikeshare dock-availability QC REST API and dashboard
 
-**REST API (FastAPI) on Posit Connect:** https://connect.systems-apps.com/content/0bd2254f-17a0-4a0a-b63b-73979c506f1e/dashboard/#map
+**REST API (FastAPI) on Posit Connect:** https://connect.systems-apps.com/content/0bd2254f-17a0-4a0a-b63b-73979c506f1e/dashboard/
 - Interactive API docs (try every endpoint): https://connect.systems-apps.com/content/0bd2254f-17a0-4a0a-b63b-73979c506f1e/docs
 - Dashboard: https://connect.systems-apps.com/content/0bd2254f-17a0-4a0a-b63b-73979c506f1e/dashboard/
 - Health check: https://connect.systems-apps.com/content/0bd2254f-17a0-4a0a-b63b-73979c506f1e/health
